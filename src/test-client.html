@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>DevLog MCP Test Client</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1 {
+            color: #333;
+        }
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .section {
+            border: 1px solid #ddd;
+            padding: 20px;
+            border-radius: 5px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        #response {
+            background-color: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        input, select {
+            width: 100%;
+            padding: 8px;
+            margin: 5px 0;
+            box-sizing: border-box;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .status.connected {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .status.disconnected {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <h1>DevLog MCP Test Client</h1>
+    
+    <div class="status disconnected" id="status">
+        Not connected - Click "Initialize" to start
+    </div>
+
+    <div class="container">
+        <div class="section">
+            <h2>Actions</h2>
+            
+            <h3>1. Initialize Connection</h3>
+            <button onclick="initialize()">Initialize</button>
+            
+            <h3>2. Test Tools</h3>
+            <button onclick="listTools()">List Tools</button>
+            <button onclick="testConnection()">Test Connection</button>
+            
+            <h3>3. Search DevLogs</h3>
+            <input type="text" id="searchQuery" placeholder="Search query (e.g., 'template')">
+            <select id="searchType">
+                <option value="all">All</option>
+                <option value="posts">Posts</option>
+                <option value="ideas">Ideas</option>
+                <option value="features">Features</option>
+            </select>
+            <button onclick="searchDevlogs()">Search</button>
+            
+            <h3>4. List Recent</h3>
+            <input type="number" id="recentDays" placeholder="Days (default: 7)" value="7">
+            <button onclick="listRecent()">List Recent</button>
+            
+            <h3>5. Analyze Feature</h3>
+            <input type="text" id="featureName" placeholder="Feature name">
+            <button onclick="analyzeFeature()">Analyze</button>
+        </div>
+        
+        <div class="section">
+            <h2>Response</h2>
+            <div id="response">No response yet</div>
+        </div>
+    </div>
+
+    <script>
+        let sessionId = null;
+        const baseUrl = 'http://localhost:3100';
+        
+        function updateStatus(connected) {
+            const status = document.getElementById('status');
+            if (connected) {
+                status.className = 'status connected';
+                status.textContent = `Connected - Session ID: ${sessionId}`;
+            } else {
+                status.className = 'status disconnected';
+                status.textContent = 'Not connected - Click "Initialize" to start';
+            }
+        }
+        
+        async function sendRequest(method, params = {}, id = Date.now()) {
+            const headers = {
+                'Content-Type': 'application/json',
+            };
+            
+            if (sessionId) {
+                headers['mcp-session-id'] = sessionId;
+            }
+            
+            const body = {
+                jsonrpc: '2.0',
+                method: method,
+                params: params,
+                id: id
+            };
+            
+            document.getElementById('response').textContent = 'Sending request...';
+            
+            try {
+                const response = await fetch(`${baseUrl}/mcp`, {
+                    method: 'POST',
+                    headers: headers,
+                    body: JSON.stringify(body)
+                });
+                
+                const result = await response.json();
+                
+                // Extract session ID from response headers if present
+                const newSessionId = response.headers.get('mcp-session-id');
+                if (newSessionId) {
+                    sessionId = newSessionId;
+                    updateStatus(true);
+                }
+                
+                document.getElementById('response').textContent = JSON.stringify(result, null, 2);
+                return result;
+            } catch (error) {
+                document.getElementById('response').textContent = `Error: ${error.message}`;
+                throw error;
+            }
+        }
+        
+        async function initialize() {
+            const result = await sendRequest('initialize', {
+                protocolVersion: '2024-11-05',
+                capabilities: {},
+                clientInfo: {
+                    name: 'web-test-client',
+                    version: '1.0.0'
+                }
+            });
+        }
+        
+        async function listTools() {
+            await sendRequest('tools/list');
+        }
+        
+        async function testConnection() {
+            await sendRequest('tools/call', {
+                name: 'test_devlog_connection',
+                arguments: {}
+            });
+        }
+        
+        async function searchDevlogs() {
+            const query = document.getElementById('searchQuery').value;
+            const type = document.getElementById('searchType').value;
+            
+            if (!query) {
+                alert('Please enter a search query');
+                return;
+            }
+            
+            await sendRequest('tools/call', {
+                name: 'search_devlogs',
+                arguments: {
+                    query: query,
+                    type: type,
+                    limit: 10
+                }
+            });
+        }
+        
+        async function listRecent() {
+            const days = parseInt(document.getElementById('recentDays').value) || 7;
+            
+            await sendRequest('tools/call', {
+                name: 'list_recent_devlogs',
+                arguments: {
+                    days: days,
+                    type: 'all'
+                }
+            });
+        }
+        
+        async function analyzeFeature() {
+            const featureName = document.getElementById('featureName').value;
+            
+            if (!featureName) {
+                alert('Please enter a feature name');
+                return;
+            }
+            
+            await sendRequest('tools/call', {
+                name: 'analyze_feature_history',
+                arguments: {
+                    featureName: featureName
+                }
+            });
+        }
+    </script>
+</body>
+</html>
