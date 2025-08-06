@@ -7,7 +7,7 @@ const INDEXER_PATH = path.join(process.cwd(), 'scripts', 'chroma-indexer.py');
  * Auto-capture and index Perplexity search results
  */
 export async function capturePerplexitySearch(query: string, response: string): Promise<void> {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve, _reject) => {
     const python = spawn('python3', [
       INDEXER_PATH,
       '--index-perplexity',
@@ -41,14 +41,14 @@ export async function capturePerplexitySearch(query: string, response: string): 
 /**
  * Auto-capture and index Jira data
  */
-export async function captureJiraData(issueKey: string, data: any): Promise<void> {
-  return new Promise(async (resolve) => {
-    try {
-      // Save to temp file
-      const tempFile = `/tmp/jira-autocapture-${Date.now()}.json`;
-      const fs = await import('fs/promises');
-      await fs.writeFile(tempFile, JSON.stringify(data, null, 2));
+export async function captureJiraData(issueKey: string, data: unknown): Promise<void> {
+  try {
+    // Save to temp file
+    const tempFile = `/tmp/jira-autocapture-${Date.now()}.json`;
+    const fs = await import('fs/promises');
+    await fs.writeFile(tempFile, JSON.stringify(data, null, 2));
 
+    return new Promise((resolve) => {
       const python = spawn('python3', [
         INDEXER_PATH,
         '--index-jira',
@@ -59,7 +59,9 @@ export async function captureJiraData(issueKey: string, data: any): Promise<void
         // Clean up temp file
         try {
           await fs.unlink(tempFile);
-        } catch {}
+        } catch {
+          // Ignore error
+        }
         
         if (code === 0) {
           console.error(`[AutoCapture] Indexed Jira issue: ${issueKey}`);
@@ -70,11 +72,10 @@ export async function captureJiraData(issueKey: string, data: any): Promise<void
       python.on('error', () => {
         resolve();
       });
-    } catch (err) {
-      console.error(`[AutoCapture] Error capturing Jira data: ${err}`);
-      resolve();
-    }
-  });
+    });
+  } catch (err) {
+    console.error(`[AutoCapture] Error capturing Jira data: ${err}`);
+  }
 }
 
 /**

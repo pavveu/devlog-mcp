@@ -9,7 +9,6 @@ import { ToolDefinition, registerTools } from '../tools/registry.js';
 import { withToolTracking } from '../utils/tool-tracker.js';
 import { DEVLOG_PATH } from '../shared/devlog-utils.js';
 import { promises as fs } from 'fs';
-import path from 'path';
 
 export interface ServerConfig {
   name: string;

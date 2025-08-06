@@ -3,10 +3,12 @@
  * Allows enabling/disabling specific tools per environment
  */
 
+import * as fs from 'fs';
+
 export interface ToolConfig {
   [toolName: string]: {
     enabled: boolean;
-    config?: Record<string, any>;
+    config?: Record<string, unknown>;
   };
 }
 
@@ -45,7 +47,7 @@ export function loadToolConfig(): ToolConfig {
     try {
       const override = JSON.parse(configOverride);
       return { ...defaultConfig, ...override };
-    } catch (e) {
+    } catch {
       console.warn('Invalid DEVLOG_TOOL_CONFIG, using defaults');
     }
   }
@@ -54,10 +56,9 @@ export function loadToolConfig(): ToolConfig {
   const configPath = process.env.DEVLOG_TOOL_CONFIG_PATH;
   if (configPath) {
     try {
-      const fs = require('fs');
       const fileConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
       return { ...defaultConfig, ...fileConfig };
-    } catch (e) {
+    } catch {
       console.warn(`Could not load config from ${configPath}, using defaults`);
     }
   }

@@ -2,8 +2,8 @@
 
 export interface ParsedDevlog {
   content: string;
-  data: any;
-  tags: Record<string, any>;
+  data: Record<string, unknown>;
+  tags: Record<string, unknown>;
   title?: string;
   date?: string;
 }
@@ -16,8 +16,8 @@ export interface SearchResult {
   parsedContent?: string;
   title?: string;
   date?: string;
-  tags?: Record<string, any>;
-  frontmatter?: any;
+  tags?: Record<string, unknown>;
+  frontmatter?: Record<string, unknown>;
 }
 
 export interface WorkspaceInfo {

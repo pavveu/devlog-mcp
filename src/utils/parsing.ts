@@ -15,7 +15,7 @@ export function parseDevlogContent(content: string): ParsedDevlog {
     const fixedContent = fixYamlContent(content);
     try {
       parsed = matter(fixedContent);
-    } catch (secondError) {
+    } catch {
       // If still fails, return minimal parsed content
       console.warn('Failed to parse YAML frontmatter:', error);
       return {
@@ -29,7 +29,7 @@ export function parseDevlogContent(content: string): ParsedDevlog {
   }
   
   // Extract tags - handle both object and array formats
-  let tags: Record<string, any> = {};
+  let tags: Record<string, unknown> = {};
   if (parsed.data.tags) {
     if (typeof parsed.data.tags === 'object' && !Array.isArray(parsed.data.tags)) {
       tags = parsed.data.tags;
@@ -60,7 +60,7 @@ function fixYamlContent(content: string): string {
   
   // Fix unquoted values in tags section
   // This regex finds lines like "  type: testing" and adds quotes
-  frontmatter = frontmatter.replace(/^(\s+)([\w-]+):\s*([^"'\[\{].*?)$/gm, (match, indent, key, value) => {
+  frontmatter = frontmatter.replace(/^(\s+)([\w-]+):\s*([^"'[{].*?)$/gm, (match, indent, key, value) => {
     // Skip if value is already quoted, is a number, boolean, or null
     if (/^(true|false|null|\d+(\.\d+)?|".*"|'.*'|\[.*\]|\{.*\})$/.test(value.trim())) {
       return match;

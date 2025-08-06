@@ -24,7 +24,7 @@ export async function checkLock(): Promise<WorkspaceLock | null> {
   try {
     const lockContent = await fs.readFile(LOCK_FILE, 'utf-8');
     return JSON.parse(lockContent);
-  } catch (error) {
+  } catch {
     // No lock file means no lock
     return null;
   }

@@ -274,11 +274,11 @@ server.registerResource(
       })
     );
     
-    sortedFiles.sort((a: any, b: any) => b.mtime.getTime() - a.mtime.getTime());
+    sortedFiles.sort((a: { mtime: Date }, b: { mtime: Date }) => b.mtime.getTime() - a.mtime.getTime());
     const recent = sortedFiles.slice(0, 10);
     
     return {
-      contents: recent.map(({ file }: any) => ({
+      contents: recent.map(({ file }: { file: string }) => ({
         uri: `devlog://posts/${file}`,
         mimeType: 'text/markdown',
         text: file,

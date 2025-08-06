@@ -55,7 +55,7 @@ export const analysisTools: ToolDefinition[] = [
       
       // Determine status
       let status = 'unknown';
-      let progress: Array<{ status: string; text: string }> = [];
+      const progress: Array<{ status: string; text: string }> = [];
       
       if (content.includes('✅') || content.includes('completed') || content.includes('implemented')) {
         status = 'completed';

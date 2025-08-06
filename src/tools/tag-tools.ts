@@ -66,10 +66,12 @@ export const tagTools: ToolDefinition[] = [
             
             if (Array.isArray(value)) {
               value.forEach(v => {
-                tagStats[key][v] = (tagStats[key][v] || 0) + 1;
+                const vStr = String(v);
+                tagStats[key][vStr] = (tagStats[key][vStr] || 0) + 1;
               });
             } else {
-              tagStats[key][value] = (tagStats[key][value] || 0) + 1;
+              const valueStr = String(value);
+              tagStats[key][valueStr] = (tagStats[key][valueStr] || 0) + 1;
             }
           });
         }
@@ -113,10 +115,11 @@ export const tagTools: ToolDefinition[] = [
       results.forEach(r => {
         if (r.tags && r.tags[tagName]) {
           count++;
-          if (Array.isArray(r.tags[tagName])) {
-            r.tags[tagName].forEach(v => values.add(v));
+          const tagValue = r.tags[tagName];
+          if (Array.isArray(tagValue)) {
+            tagValue.forEach(v => values.add(String(v)));
           } else {
-            values.add(r.tags[tagName]);
+            values.add(String(tagValue));
           }
         }
       });

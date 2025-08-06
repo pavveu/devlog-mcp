@@ -13,8 +13,6 @@ import {
   generateActiveHoursVisualization,
   generateActivityClock,
   generateTaskDistribution,
-  generateSparkline,
-  generateProgressBar,
   generateConceptualDiagrams,
   generateCompressedFilename
 } from './tools/compression-enhancements.js';
@@ -32,6 +30,41 @@ import { withToolTracking } from './utils/tool-tracker.js';
 
 // Get devlog path from environment or use default
 const DEVLOG_PATH = process.env.DEVLOG_PATH || path.join(process.cwd(), 'devlog');
+
+// Type definitions for productivity metrics
+interface ProductivityMetrics {
+  totalFiles: number;
+  newFiles: number;
+  updatedFiles: number;
+  featuresCompleted: number;
+  decisionsLogged: number;
+  bugsFixed: number;
+  dailySessions: number;
+  avgSessionLength: number;
+  mostActiveDay: string;
+  productivity: 'HIGH' | 'MEDIUM' | 'LOW';
+}
+
+interface TimelineEvent {
+  type: 'FEATURE' | 'DECISION' | 'POST' | 'MILESTONE';
+  title: string;
+  date: string;
+  description?: string;
+  file?: string;
+  impact?: 'HIGH' | 'MEDIUM' | 'LOW';
+}
+
+interface VelocityData {
+  metrics: ProductivityMetrics;
+  period: string;
+  startDate: string;
+  endDate: string;
+  recommendations: string[];
+}
+
+interface TimelineData {
+  events: TimelineEvent[];
+}
 
 // Filename generation helpers
 interface FilenameOptions {
@@ -100,7 +133,7 @@ async function extractMainFocusFromContent(content: string): Promise<string | un
     }
     
     return undefined;
-  } catch (error) {
+  } catch {
     return undefined;
   }
 }
@@ -250,7 +283,7 @@ function calculateSessionDuration(sessionStart: string | null, sessionEnd: Date)
     }
     
     return { durationMinutes, durationHours, formattedDuration };
-  } catch (error) {
+  } catch {
     return { 
       durationMinutes: 0, 
       durationHours: 0, 
@@ -295,8 +328,8 @@ async function readDevlogFile(filePath: string) {
 // Helper to parse frontmatter and extract tags
 interface ParsedDevlog {
   content: string;
-  data: any;
-  tags: Record<string, any>;
+  data: Record<string, unknown>;
+  tags: Record<string, unknown>;
   title?: string;
   date?: string;
 }
@@ -305,7 +338,7 @@ function parseDevlogContent(content: string): ParsedDevlog {
   const parsed = matter(content);
   
   // Extract tags - handle both object and array formats
-  let tags: Record<string, any> = {};
+  let tags: Record<string, unknown> = {};
   if (parsed.data.tags) {
     if (typeof parsed.data.tags === 'object' && !Array.isArray(parsed.data.tags)) {
       tags = parsed.data.tags;
@@ -324,7 +357,7 @@ function parseDevlogContent(content: string): ParsedDevlog {
 }
 
 // Helper to search devlog entries
-async function searchDevlogs(query: string, type: string = 'all', tagFilters?: Record<string, any>) {
+async function searchDevlogs(query: string, type: string = 'all', tagFilters?: Record<string, unknown>) {
   const patterns: Record<string, string> = {
     posts: 'posts/**/*.md',
     ideas: 'ideas-to-verify/**/*.md',
@@ -361,14 +394,21 @@ async function searchDevlogs(query: string, type: string = 'all', tagFilters?: R
         }
         
         // Handle array values
-        if (Array.isArray(parsed.tags[tagKey])) {
+        const tagKeyValue = parsed.tags[tagKey];
+        if (Array.isArray(tagKeyValue)) {
           if (Array.isArray(tagValue)) {
-            tagMatch = tagValue.some(v => parsed.tags[tagKey].includes(v));
+            tagMatch = tagValue.some(v => tagKeyValue.includes(v));
           } else {
-            tagMatch = parsed.tags[tagKey].includes(tagValue);
+            tagMatch = tagKeyValue.includes(tagValue);
+          }
+        } else if (typeof tagKeyValue === 'string') {
+          if (Array.isArray(tagValue)) {
+            tagMatch = tagValue.includes(tagKeyValue);
+          } else {
+            tagMatch = tagKeyValue.includes(tagValue as string);
           }
         } else {
-          tagMatch = parsed.tags[tagKey] === tagValue;
+          tagMatch = tagKeyValue === tagValue;
         }
         
         if (!tagMatch) break;
@@ -502,7 +542,7 @@ async function getFeatureStatus(featureName: string) {
         excerpt: statusContent.substring(0, 300) + '...',
       };
     }
-  } catch (error) {
+  } catch {
     // Status file doesn't exist, search in general devlogs
   }
   
@@ -1390,7 +1430,7 @@ async function generateVelocityInsights(period: string = 'week') {
   };
 }
 
-function generateProductivityRecommendations(metrics: any): string[] {
+function generateProductivityRecommendations(metrics: ProductivityMetrics): string[] {
   const recommendations = [];
   
   if (metrics.featuresCompleted === 0) {
@@ -1540,7 +1580,7 @@ async function generateTimeline(range: string = 'month', format: string = 'text'
     if (!content) continue;
     
     // Extract date from directory name
-    const match = file.match(/features\/(\d{4}-\d{2}-\d{2})-([^\/]+)/);
+    const match = file.match(/features\/(\d{4}-\d{2}-\d{2})-([^/]+)/);
     if (match) {
       const [, dateStr, featureName] = match;
       const eventDate = new Date(dateStr);
@@ -1619,7 +1659,7 @@ async function generateTimeline(range: string = 'month', format: string = 'text'
   };
 }
 
-function generateTimelineSummary(events: any[]) {
+function generateTimelineSummary(events: TimelineEvent[]) {
   const features = events.filter(e => e.type === 'FEATURE');
   const decisions = events.filter(e => e.type === 'DECISION');
   const posts = events.filter(e => e.type === 'POST');
@@ -1681,7 +1721,7 @@ server.registerTool(
     // Timeline events
     result += `🕒 **Timeline**:\n`;
     
-    const groupedByDate: Record<string, any[]> = {};
+    const groupedByDate: Record<string, TimelineEvent[]> = {};
     timeline.events.forEach(event => {
       if (!groupedByDate[event.date]) {
         groupedByDate[event.date] = [];
@@ -1707,7 +1747,7 @@ server.registerTool(
           MEDIUM: '⚡',
           LOW: '💡'
         };
-        const impactIcon = impactIconMap[event.impact] || '💡';
+        const impactIcon = event.impact ? impactIconMap[event.impact] : '💡';
         
         result += `  ${icon} ${impactIcon} **${event.title}**\n`;
         result += `    📁 ${event.file}\n`;
@@ -1799,7 +1839,17 @@ server.registerTool(
       }
       
       // Extract data from each session
-      const sessions: any[] = [];
+      interface SessionData {
+        file: string;
+        date: Date;
+        content: string;
+        frontmatter: Record<string, unknown>;
+        completedTasks: string[];
+        decisions: string[];
+        insights: string[];
+        summary: string;
+      }
+      const sessions: SessionData[] = [];
       for (const file of dailyFiles) {
         const content = await readDevlogFile(file);
         if (!content) continue;
@@ -2009,7 +2059,7 @@ ${Object.entries(eventsByDate).length > 0 ?
   Object.entries(eventsByDate).map(([date, events]) => {
     const dayName = new Date(date).toLocaleDateString('en-US', { weekday: 'long' });
     return `### ${dayName}, ${date}
-${events.map((e: any) => {
+${events.map((e) => {
   const icon = e.type === 'FEATURE' ? '🚀' : 
                e.type === 'DECISION' ? '🤔' : 
                e.type === 'POST' ? '📝' : '📋';
@@ -2795,10 +2845,12 @@ server.registerTool(
         
         if (Array.isArray(value)) {
           for (const v of value) {
-            tagStats[key][v] = (tagStats[key][v] || 0) + 1;
+            const vStr = String(v);
+            tagStats[key][vStr] = (tagStats[key][vStr] || 0) + 1;
           }
         } else {
-          tagStats[key][value] = (tagStats[key][value] || 0) + 1;
+          const valueStr = String(value);
+          tagStats[key][valueStr] = (tagStats[key][valueStr] || 0) + 1;
         }
       }
     }
@@ -2842,10 +2894,11 @@ server.registerTool(
     for (const result of results) {
       if (!result.tags || !result.tags[tagKey]) continue;
       
-      if (Array.isArray(result.tags[tagKey])) {
-        result.tags[tagKey].forEach((v: string) => values.add(v));
+      const tagValue = result.tags[tagKey];
+      if (Array.isArray(tagValue)) {
+        tagValue.forEach((v) => values.add(String(v)));
       } else {
-        values.add(result.tags[tagKey]);
+        values.add(String(tagValue));
       }
     }
     

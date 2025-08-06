@@ -63,7 +63,7 @@ export async function extractMetadata(filePath: string): Promise<SessionMetadata
     
     const jsonStr = content.substring(jsonStart, endIdx).trim();
     return JSON.parse(jsonStr);
-  } catch (error) {
+  } catch {
     return null;
   }
 }

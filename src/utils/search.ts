@@ -60,14 +60,15 @@ export async function searchDevlogs(
         }
         
         // Handle array values
-        if (Array.isArray(parsed.tags[tagKey])) {
+        const tagKeyValue = parsed.tags[tagKey];
+        if (Array.isArray(tagKeyValue)) {
           if (Array.isArray(tagValue)) {
-            tagMatch = tagValue.some(v => parsed.tags[tagKey].includes(v));
+            tagMatch = tagValue.some(v => tagKeyValue.includes(v));
           } else {
-            tagMatch = parsed.tags[tagKey].includes(tagValue);
+            tagMatch = tagKeyValue.includes(tagValue);
           }
         } else {
-          tagMatch = parsed.tags[tagKey] === tagValue;
+          tagMatch = tagKeyValue === tagValue;
         }
         
         if (!tagMatch) break;

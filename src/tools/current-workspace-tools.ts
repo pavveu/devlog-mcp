@@ -102,7 +102,7 @@ export const currentWorkspaceTools: ToolDefinition[] = [
     handler: async ({ section, content, append = false }: any) => {
       try {
         const currentPath = path.join(DEVLOG_PATH, 'current.md');
-        let existingContent = await fs.readFile(currentPath, 'utf-8');
+        const existingContent = await fs.readFile(currentPath, 'utf-8');
         
         const sectionMap = {
           focus: '## 🎯 Current Focus',

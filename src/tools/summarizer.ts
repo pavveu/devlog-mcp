@@ -205,7 +205,7 @@ export class Summarizer {
       case 'bullets':
         return texts.map(t => `• ${t}`).join('\n');
       
-      case 'structured':
+      case 'structured': {
         // Group by features
         const actionSentences = sentences.filter(s => s.features.hasActionWords);
         const keySentences = sentences.filter(s => s.features.titleSimilarity > 0.5);
@@ -220,6 +220,7 @@ export class Summarizer {
           structured += actionSentences.map(s => `- ${s.text}`).join('\n');
         }
         return structured;
+      }
       
       case 'paragraph':
       default:

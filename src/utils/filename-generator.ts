@@ -90,7 +90,7 @@ export async function extractMainFocus(devlogPath: string): Promise<string | und
     }
     
     return undefined;
-  } catch (error) {
+  } catch {
     // No current.md or error reading it
     return undefined;
   }

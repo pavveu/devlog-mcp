@@ -106,7 +106,7 @@ export const summarizationTools: ToolDefinition[] = [
           includeMetadata
         });
 
-        let result = {
+        const result = {
           file,
           summary: summary.text,
           keyPoints: summary.keyPoints,

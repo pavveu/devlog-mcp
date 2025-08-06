@@ -33,7 +33,7 @@ function calculateSessionDuration(sessionStart, sessionEnd) {
     }
     
     return { durationMinutes, durationHours, formattedDuration };
-  } catch (error) {
+  } catch {
     return { 
       durationMinutes: 0, 
       durationHours: 0, 

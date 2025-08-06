@@ -103,7 +103,9 @@ async function parseCurrentWeek(): Promise<{
 // Add item to currentWeek.md without removing existing content
 async function addItemToCurrentWeek(item: WeeklyItem): Promise<void> {
   const filePath = getCurrentWeekFilePath();
-  let { content, sections, yamlEndLine } = await parseCurrentWeek();
+  const weekData = await parseCurrentWeek();
+  let content = weekData.content;
+  const sections = weekData.sections;
   
   // Find or create the tracking section
   const trackingSectionName = '🐛 Issues & 🚀 Features This Week';
@@ -114,7 +116,6 @@ async function addItemToCurrentWeek(item: WeeklyItem): Promise<void> {
     const relatedFilesSection = sections['Related Files'] || sections['🔗 Related Files'];
     
     let insertPoint: number;
-    const lines = content.split('\n');
     
     if (relatedFilesSection) {
       // Insert before Related Files section
@@ -152,13 +153,10 @@ async function addItemToCurrentWeek(item: WeeklyItem): Promise<void> {
   const lines = trackingSection.content.split('\n');
   
   let subsectionIndex = -1;
-  let nextSubsectionIndex = lines.length;
   
   for (let i = 0; i < lines.length; i++) {
     if (lines[i].includes(subsection)) {
       subsectionIndex = i;
-    } else if (subsectionIndex !== -1 && lines[i].startsWith('###')) {
-      nextSubsectionIndex = i;
       break;
     }
   }
@@ -263,7 +261,7 @@ async function extractItemsFromCurrent(): Promise<WeeklyItem[]> {
     }
     
     return items;
-  } catch (error) {
+  } catch {
     return [];
   }
 }
@@ -442,7 +440,6 @@ export const weeklyIntegrationTools: ToolDefinition[] = [
         
         // Track checkbox items in daily schedule
         let inDailySection = false;
-        let currentDay = '';
         
         for (const line of lines) {
           // Extract week title
@@ -484,7 +481,6 @@ export const weeklyIntegrationTools: ToolDefinition[] = [
           // Track daily schedule sections
           if (line.match(/^###\s+\*\*(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)/)) {
             inDailySection = true;
-            currentDay = line;
           }
           
           // End daily section at next heading
@@ -579,7 +575,6 @@ export const weeklyIntegrationTools: ToolDefinition[] = [
               
               if (metadata.timing) {
                 const activeMinutes = metadata.timing.active_minutes || 0;
-                const totalMinutes = metadata.timing.total_minutes || 0;
                 const hours = Math.floor(activeMinutes / 60);
                 const minutes = activeMinutes % 60;
                 

@@ -37,7 +37,7 @@ export async function fileExists(filePath: string): Promise<boolean> {
 export async function ensureDir(dirPath: string): Promise<void> {
   try {
     await fs.mkdir(dirPath, { recursive: true });
-  } catch (error) {
+  } catch {
     // Directory might already exist, that's okay
   }
 }
@@ -46,8 +46,8 @@ export async function ensureDir(dirPath: string): Promise<void> {
 export async function readFile(filePath: string): Promise<string | null> {
   try {
     return await fs.readFile(filePath, 'utf-8');
-  } catch (error) {
-    console.error(`Error reading file ${filePath}:`, error);
+  } catch {
+    console.error(`Error reading file ${filePath}`);
     return null;
   }
 }

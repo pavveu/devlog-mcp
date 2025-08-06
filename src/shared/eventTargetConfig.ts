@@ -32,7 +32,7 @@ export function configureMaxListeners(maxListeners: number = 25): void {
   try {
     // Set max listeners for EventTarget instances (AbortSignal, etc.)
     setMaxListeners(maxListeners);
-  } catch (error) {
+  } catch {
     // Fail silently if not supported in the environment
     console.debug('setMaxListeners not supported in this environment');
   }
