@@ -21,6 +21,7 @@ A modular MCP (Model Context Protocol) server for developer logging, workspace m
 - **AI-Powered Analysis** - Optional LLM integration for insights
 - **Semantic Search** - ChromaDB integration for intelligent search
 - **Conflict Resolution** - Built-in tools for merge conflicts
+- **Visual Diagrams** - Mermaid diagram generation for analytics and insights
 
 ## Quick Start
 
@@ -81,6 +82,7 @@ Essential workspace management tools:
 - `devlog_workspace_dump` - Export workspace data
 - `devlog_session_log` - Log development sessions
 - `devlog_current_update` - Update current.md file
+- `devlog_compress_week` - Compress daily sessions into weekly retrospectives
 
 ### Analytics Server
 Development metrics and insights:
@@ -101,6 +103,75 @@ Semantic search capabilities:
 - `devlog_search_semantic` - AI-powered semantic search
 - `devlog_search_by_date` - Search within date ranges
 - `devlog_search_by_tag` - Search by tags
+
+## Visual Analytics with Mermaid
+
+DevLog MCP includes built-in Mermaid diagram generation for visualizing development patterns and progress:
+
+### Diagram Types
+
+- **Overview Flowchart** - Week-at-a-glance with productivity metrics
+- **Task Distribution Pie Chart** - Breakdown of work by category (features, bugs, research, planning)
+- **Timeline Gantt Chart** - Daily task progression visualization
+- **Decision Flow Diagram** - Architecture and implementation decision tracking
+- **Productivity Flow** - Time analysis and output metrics
+- **Architecture Overview** - System design and development focus areas
+
+### Usage in Compression
+
+When using `devlog_compress_week`, the tool automatically generates Mermaid diagrams for:
+- Task distribution analysis
+- Decision flow visualization
+- Weekly productivity overview
+
+These diagrams are embedded directly in the weekly summary markdown files, providing visual insights alongside textual summaries.
+
+### Example Output
+
+```mermaid
+pie title Task Distribution - Week 1
+    "Features" : 45
+    "Bug Fixes" : 20
+    "Research" : 20
+    "Planning" : 10
+    "Other" : 5
+```
+
+## Retrospectives & Weekly Reviews
+
+DevLog MCP automatically organizes your development history into retrospective summaries for better long-term tracking and analysis.
+
+### Weekly Retrospectives
+
+The `devlog_compress_week` tool consolidates daily sessions into comprehensive weekly summaries stored in `devlog/retrospective/weekly/`:
+
+- **Automatic Metrics** - Sessions count, estimated hours, completed tasks
+- **Key Decisions** - Architectural and implementation choices tracked
+- **Insights & Learnings** - Important discoveries and knowledge gained
+- **Visual Analytics** - Embedded Mermaid diagrams for data visualization
+- **Daily Breakdown** - Preserves daily progress context
+
+### Monthly Retrospectives
+
+Monthly summaries are stored in `devlog/retrospective/monthly/` for quarterly reviews and long-term pattern analysis.
+
+### Directory Structure
+
+```
+devlog/
+├── daily/          # Active daily sessions
+├── retrospective/  # Consolidated reviews
+│   ├── weekly/     # Weekly summaries (e.g., 2025-W01-consolidated.md)
+│   └── monthly/    # Monthly reviews
+└── archive/        # Compressed daily files
+```
+
+### Benefits
+
+- **Searchable History** - Weekly summaries become primary search targets
+- **Pattern Recognition** - Identify productivity trends over time
+- **Decision Tracking** - Review past architectural choices
+- **Knowledge Base** - Build institutional memory of learnings
 
 ## Configuration
 
