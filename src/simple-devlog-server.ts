@@ -66,232 +66,240 @@ interface TimelineData {
   events: TimelineEvent[];
 }
 
+interface SessionData {
+  file: string;
+  date: Date;
+  content: string;
+  frontmatter: {
+    tags?: {
+      scope?: string | string[];
+      [key: string]: unknown;
+    };
+    [key: string]: unknown;
+  };
+  completedTasks: string[];
+  decisions: string[];
+  insights: string[];
+  summary: string;
+  [key: string]: unknown;
+}
+
+interface TestCategories {
+  unit: string[];
+  integration: string[];
+  e2e: string[];
+  regression: string[];
+  performance: string[];
+  security: string[];
+}
+
+interface ResearchItem {
+  source: string;
+  content: string;
+  findings: string[];
+}
+
+interface CodebaseAnalysis {
+  checklist: string[];
+  conflicts: {component: string; reason: string}[];
+  components: string[];
+  testScenarios: string[];
+}
+
+
+// interface VelocityData {
+//   metrics: ProductivityMetrics;
+//   period: string;
+//   startDate: string;
+//   endDate: string;
+//   recommendations: string[];
+// }
+
+// interface TimelineData {
+//   events: TimelineEvent[];
+// }
+
 // Filename generation helpers
-interface FilenameOptions {
-  type: 'session' | 'feature' | 'decision' | 'research' | 'analysis' | 'bugfix';
-  topic?: string;
-  date?: Date;
-}
+// interface FilenameOptions {
+//   type: 'session' | 'feature' | 'decision' | 'research' | 'analysis' | 'bugfix';
+//   topic?: string;
+//   date?: Date;
+// }
 
-function generateDescriptiveFilename(options: FilenameOptions): string {
-  const now = options.date || new Date();
-  
-  // Date components
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  const hour = String(now.getHours()).padStart(2, '0');
-  const minute = String(now.getMinutes()).padStart(2, '0');
-  
-  // Day of week
-  const dayName = now.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
-  
-  // Build filename parts
-  const parts = [
-    `${year}-${month}-${day}`,
-    `${hour}h${minute}`,
-    dayName,
-    options.type
-  ];
-  
-  // Add topic if provided
-  if (options.topic) {
-    // Sanitize topic for filename
-    const sanitizedTopic = options.topic
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .substring(0, 50); // Limit length
-    
-    if (sanitizedTopic) {
-      parts.push(sanitizedTopic);
-    }
-  }
-  
-  return parts.join('-') + '.md';
-}
-
-async function extractMainFocusFromContent(content: string): Promise<string | undefined> {
-  try {
-    // Try to extract from various sources
-    // 1. From Current Focus section
-    const focusMatch = content.match(/## 🎯 (?:Current Focus|Today's Focus)\s*\n+(?:- \[.\] )?(.+)/);
-    if (focusMatch) {
-      return focusMatch[1].trim();
-    }
-    
-    // 2. From first In Progress item
-    const progressMatch = content.match(/## 🚧 In Progress\s*\n+(?:- \[.\] )?(.+)/);
-    if (progressMatch) {
-      return progressMatch[1].trim();
-    }
-    
-    // 3. From active todo items
-    const todoMatch = content.match(/- \[x?\] (.+)/);
-    if (todoMatch) {
-      return todoMatch[1].trim();
-    }
-    
-    return undefined;
-  } catch {
-    return undefined;
-  }
-}
+// function generateDescriptiveFilename(options: FilenameOptions): string {
+//   const now = options.date || new Date();
+//   
+//   // Date components
+//   const year = now.getFullYear();
+//   const month = String(now.getMonth() + 1).padStart(2, '0');
+//   const day = String(now.getDate()).padStart(2, '0');
+//   const hour = String(now.getHours()).padStart(2, '0');
+//   const minute = String(now.getMinutes()).padStart(2, '0');
+//   
+//   // Day of week
+//   const dayName = now.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
+//   
+//   // Build filename parts
+//   const parts = [
+//     `${year}-${month}-${day}`,
+//     `${hour}h${minute}`,
+//     dayName,
+//     options.type
+//   ];
+//   
+//   // Add topic if provided
+//   if (options.topic) {
+//     // Sanitize topic for filename
+//     const sanitizedTopic = options.topic
+//       .toLowerCase()
+//       .replace(/[^a-z0-9]+/g, '-')
+//       .replace(/^-+|-+$/g, '')
+//       .substring(0, 50); // Limit length
+//     
+//     if (sanitizedTopic) {
+//       parts.push(sanitizedTopic);
+//     }
+//   }
+//   
+//   return parts.join('-') + '.md';
+// }
+// 
 
 // Helper functions for session dumps
-function detectScopes(content: string): string {
-  const scopes = new Set<string>();
-  const lowerContent = content.toLowerCase();
-  
-  if (lowerContent.includes('feature') || lowerContent.includes('implement')) {
-    scopes.add('feature');
-  }
-  if (lowerContent.includes('bug') || lowerContent.includes('fix')) {
-    scopes.add('bugfix');
-  }
-  if (lowerContent.includes('research') || lowerContent.includes('investigate')) {
-    scopes.add('research');
-  }
-  if (lowerContent.includes('refactor') || lowerContent.includes('cleanup')) {
-    scopes.add('refactoring');
-  }
-  if (lowerContent.includes('test') || lowerContent.includes('testing')) {
-    scopes.add('testing');
-  }
-  if (lowerContent.includes('document') || lowerContent.includes('docs')) {
-    scopes.add('documentation');
-  }
-  
-  return Array.from(scopes).join(', ') || 'general';
-}
-
-function extractSessionSummary(content: string): string {
-  const lines = content.split('\n');
-  const completedItems: string[] = [];
-  const inProgressItems: string[] = [];
-  
-  for (const line of lines) {
-    if (line.includes('- [x]')) {
-      completedItems.push(line.replace(/- \[x\]\s*/, '').trim());
-    } else if (line.includes('✅')) {
-      completedItems.push(line.replace(/.*✅\s*/, '').trim());
-    } else if (line.includes('- [ ]') && !line.includes('Queue for later') && !line.includes('New task')) {
-      inProgressItems.push(line.replace(/- \[ \]\s*/, '').trim());
-    }
-  }
-  
-  let summary = '';
-  
-  if (completedItems.length > 0) {
-    summary += `### Completed\n${completedItems.map(item => `- ✅ ${item}`).join('\n')}\n\n`;
-  }
-  
-  if (inProgressItems.length > 0) {
-    summary += `### In Progress\n${inProgressItems.slice(0, 5).map(item => `- 🚧 ${item}`).join('\n')}`;
-    if (inProgressItems.length > 5) {
-      summary += `\n- ... and ${inProgressItems.length - 5} more items`;
-    }
-  }
-  
-  return summary || 'No specific tasks tracked in this session.';
-}
-
+// function detectScopes(content: string): string {
+//   const scopes = new Set<string>();
+//   const lowerContent = content.toLowerCase();
+//   
+//   if (lowerContent.includes('feature') || lowerContent.includes('implement')) {
+//     scopes.add('feature');
+//   }
+//   if (lowerContent.includes('bug') || lowerContent.includes('fix')) {
+//     scopes.add('bugfix');
+//   }
+//   if (lowerContent.includes('research') || lowerContent.includes('investigate')) {
+//     scopes.add('research');
+//   }
+//   if (lowerContent.includes('refactor') || lowerContent.includes('cleanup')) {
+//     scopes.add('refactoring');
+//   }
+//   if (lowerContent.includes('test') || lowerContent.includes('testing')) {
+//     scopes.add('testing');
+//   }
+//   if (lowerContent.includes('document') || lowerContent.includes('docs')) {
+//     scopes.add('documentation');
+//   }
+//   
+//   return Array.from(scopes).join(', ') || 'general';
+// }
+// 
+// function extractSessionSummary(content: string): string {
+//   const lines = content.split('\n');
+//   const completedItems: string[] = [];
+//   const inProgressItems: string[] = [];
+//   
+//   for (const line of lines) {
+//     if (line.includes('- [x]')) {
+//       completedItems.push(line.replace(/- \[x\]\s*/, '').trim());
+//     } else if (line.includes('✅')) {
+//       completedItems.push(line.replace(/.*✅\s*/, '').trim());
+//     } else if (line.includes('- [ ]') && !line.includes('Queue for later') && !line.includes('New task')) {
+//       inProgressItems.push(line.replace(/- \[ \]\s*/, '').trim());
+//     }
+//   }
+//   
+//   let summary = '';
+//   
+//   if (completedItems.length > 0) {
+//     summary += `### Completed\n${completedItems.map(item => `- ✅ ${item}`).join('\n')}\n\n`;
+//   }
+//   
+//   if (inProgressItems.length > 0) {
+//     summary += `### In Progress\n${inProgressItems.slice(0, 5).map(item => `- 🚧 ${item}`).join('\n')}`;
+//     if (inProgressItems.length > 5) {
+//       summary += `\n- ... and ${inProgressItems.length - 5} more items`;
+//     }
+//   }
+//   
+//   return summary || 'No specific tasks tracked in this session.';
+// }
+// 
 // Agent management utilities
-async function generateAgentId(): Promise<string> {
-  const now = new Date();
-  
-  // High-precision timestamp (seconds-level)
-  const timestamp = now.toISOString()
-    .slice(2, 19)           // YY-MM-DDTHH:MM:SS
-    .replace(/[-:T]/g, '')  // YYMMDDHHMMSS
-    .slice(0, 10);          // YYMMDDHHMM (keep 10 chars for readability)
-  
-  // Add seconds for precision
-  const seconds = now.getSeconds().toString().padStart(2, '0');
-  let agentId = `agent-${timestamp}${seconds}`;
-  
-  // Collision detection and auto-increment
-  const workspace = await getCurrentWorkspace();
-  if (workspace.exists && workspace.content) {
-    const { agentId: currentAgent } = parseAgentFromContent(workspace.content);
-    
-    if (currentAgent && currentAgent.startsWith(agentId)) {
-      // Extract counter from existing agent ID (e.g., agent-250622025145-2 → 2)
-      const match = currentAgent.match(/agent-(\d{12})-?(\d+)?$/);
-      const counter = match?.[2] ? parseInt(match[2]) + 1 : 2;
-      agentId = `${agentId}-${counter}`;
-    }
-  }
-  
-  return agentId;
-}
+// async function generateAgentId(): Promise<string> {
+//   const now = new Date();
+//   
+//   // High-precision timestamp (seconds-level)
+//   const timestamp = now.toISOString()
+//     .slice(2, 19)           // YY-MM-DDTHH:MM:SS
+//     .replace(/[-:T]/g, '')  // YYMMDDHHMMSS
+//     .slice(0, 10);          // YYMMDDHHMM (keep 10 chars for readability)
+//   
+//   // Add seconds for precision
+//   const seconds = now.getSeconds().toString().padStart(2, '0');
+//   let agentId = `agent-${timestamp}${seconds}`;
+//   
+//   // Collision detection and auto-increment
+//   const workspace = await getCurrentWorkspace();
+//   if (workspace.exists && workspace.content) {
+//     const { agentId: currentAgent } = parseAgentFromContent(workspace.content);
+//     
+//     if (currentAgent && currentAgent.startsWith(agentId)) {
+//       // Extract counter from existing agent ID (e.g., agent-250622025145-2 → 2)
+//       const match = currentAgent.match(/agent-(\d{12})-?(\d+)?$/);
+//       const counter = match?.[2] ? parseInt(match[2]) + 1 : 2;
+//       agentId = `${agentId}-${counter}`;
+//     }
+//   }
+//   
+//   return agentId;
+// }
+// 
 
-async function getCurrentWorkspace() {
-  const currentPath = path.join(DEVLOG_PATH, 'current.md');
-  try {
-    const content = await fs.readFile(currentPath, 'utf-8');
-    return { path: currentPath, content, exists: true };
-  } catch {
-    return { path: currentPath, content: null, exists: false };
-  }
-}
 
-function parseAgentFromContent(content: string): { agentId: string | null, lastActive: string | null, sessionStart: string | null } {
-  const agentMatch = content.match(/agent_id:\s*"?([^"\n]+)"?/);
-  const activeMatch = content.match(/last_active:\s*"?([^"\n]+)"?/);
-  const sessionStartMatch = content.match(/session_start:\s*"?([^"\n]+)"?/);
-  return {
-    agentId: agentMatch ? agentMatch[1] : null,
-    lastActive: activeMatch ? activeMatch[1] : null,
-    sessionStart: sessionStartMatch ? sessionStartMatch[1] : null
-  };
-}
-
-function calculateSessionDuration(sessionStart: string | null, sessionEnd: Date): { 
-  durationMinutes: number, 
-  durationHours: number, 
-  formattedDuration: string 
-} {
-  if (!sessionStart) {
-    return { 
-      durationMinutes: 0, 
-      durationHours: 0, 
-      formattedDuration: 'Unknown duration (session start not tracked)' 
-    };
-  }
-  
-  try {
-    const startTime = new Date(sessionStart);
-    const durationMs = sessionEnd.getTime() - startTime.getTime();
-    const durationMinutes = Math.round(durationMs / (1000 * 60));
-    const durationHours = Math.round((durationMs / (1000 * 60 * 60)) * 100) / 100; // Round to 2 decimal places
-    
-    // Format duration nicely
-    const hours = Math.floor(durationMinutes / 60);
-    const minutes = durationMinutes % 60;
-    
-    let formattedDuration = '';
-    if (hours > 0) {
-      formattedDuration += `${hours}h`;
-    }
-    if (minutes > 0) {
-      if (hours > 0) formattedDuration += ' ';
-      formattedDuration += `${minutes}m`;
-    }
-    if (formattedDuration === '') {
-      formattedDuration = '< 1m';
-    }
-    
-    return { durationMinutes, durationHours, formattedDuration };
-  } catch {
-    return { 
-      durationMinutes: 0, 
-      durationHours: 0, 
-      formattedDuration: 'Invalid session start time' 
-    };
-  }
-}
-
+// function calculateSessionDuration(sessionStart: string | null, sessionEnd: Date): { 
+//   durationMinutes: number, 
+//   durationHours: number, 
+//   formattedDuration: string 
+// } {
+//   if (!sessionStart) {
+//     return { 
+//       durationMinutes: 0, 
+//       durationHours: 0, 
+//       formattedDuration: 'Unknown duration (session start not tracked)' 
+//     };
+//   }
+//   
+//   try {
+//     const startTime = new Date(sessionStart);
+//     const durationMs = sessionEnd.getTime() - startTime.getTime();
+//     const durationMinutes = Math.round(durationMs / (1000 * 60));
+//     const durationHours = Math.round((durationMs / (1000 * 60 * 60)) * 100) / 100; // Round to 2 decimal places
+//     
+//     // Format duration nicely
+//     const hours = Math.floor(durationMinutes / 60);
+//     const minutes = durationMinutes % 60;
+//     
+//     let formattedDuration = '';
+//     if (hours > 0) {
+//       formattedDuration += `${hours}h`;
+//     }
+//     if (minutes > 0) {
+//       if (hours > 0) formattedDuration += ' ';
+//       formattedDuration += `${minutes}m`;
+//     }
+//     if (formattedDuration === '') {
+//       formattedDuration = '< 1m';
+//     }
+//     
+//     return { durationMinutes, durationHours, formattedDuration };
+//   } catch {
+//     return { 
+//       durationMinutes: 0, 
+//       durationHours: 0, 
+//       formattedDuration: 'Invalid session start time' 
+//     };
+//   }
+// }
+// 
 // Check if devlog exists
 async function isDevlogInitialized(): Promise<boolean> {
   try {
@@ -1540,7 +1548,7 @@ server.registerTool(
 );
 
 // Timeline generation logic
-async function generateTimeline(range: string = 'month', format: string = 'text') {
+async function generateTimeline(range: string = 'month', _format: string = 'text') {
   const now = new Date();
   let startDate: Date;
   
@@ -1561,7 +1569,7 @@ async function generateTimeline(range: string = 'month', format: string = 'text'
       startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
   }
   
-  const patterns = ['posts/**/*.md', 'decisions/**/*.md', 'features/**/*.md'];
+  // const patterns = ['posts/**/*.md', 'decisions/**/*.md', 'features/**/*.md'];
   const timelineEvents: Array<{
     date: string;
     type: 'FEATURE' | 'DECISION' | 'POST' | 'MILESTONE';
@@ -1804,7 +1812,7 @@ server.registerTool(
       useEnhanced: z.boolean().optional().default(true).describe('Use enhanced analysis (default: true)'),
     },
   },
-  async ({ weekNumber, year, dryRun = false, useEnhanced = true }): Promise<CallToolResult> => {
+  async ({ weekNumber, year, dryRun = false, useEnhanced: _useEnhanced = true }): Promise<CallToolResult> => {
     // For now, always use enhanced compression with integrated analysis
     const now = new Date();
     const currentYear = year || now.getFullYear();
@@ -1839,16 +1847,6 @@ server.registerTool(
       }
       
       // Extract data from each session
-      interface SessionData {
-        file: string;
-        date: Date;
-        content: string;
-        frontmatter: Record<string, unknown>;
-        completedTasks: string[];
-        decisions: string[];
-        insights: string[];
-        summary: string;
-      }
       const sessions: SessionData[] = [];
       for (const file of dailyFiles) {
         const content = await readDevlogFile(file);
@@ -1929,9 +1927,9 @@ server.registerTool(
           text: `✅ **Week ${weekNumber} Compressed Successfully!**\n\n` +
             `📊 Statistics:\n` +
             `- Sessions compressed: ${sessions.length}\n` +
-            `- Tasks completed: ${sessions.flatMap(s => s.completedTasks).length}\n` +
-            `- Decisions made: ${sessions.flatMap(s => s.decisions).length}\n` +
-            `- Insights captured: ${sessions.flatMap(s => s.insights).length}\n\n` +
+            `- Tasks completed: ${sessions.flatMap((s: SessionData) => s.completedTasks).length}\n` +
+            `- Decisions made: ${sessions.flatMap((s: SessionData) => s.decisions).length}\n` +
+            `- Insights captured: ${sessions.flatMap((s: SessionData) => s.insights).length}\n\n` +
             `📁 Files:\n` +
             `- Weekly summary: ${path.relative(DEVLOG_PATH, weeklyFile)}\n` +
             `- Archived to: ${path.relative(DEVLOG_PATH, archiveDir)}/\n\n` +
@@ -1981,12 +1979,12 @@ function getWeekDates(year: number, weekNumber: number) {
 }
 
 async function generateEnhancedWeeklySummary(
-  sessions: any[], 
+  sessions: SessionData[], 
   weekNumber: number, 
   year: number,
   weekDates: { start: Date; end: Date },
-  velocityData: any,
-  timelineData: any
+  velocityData: VelocityData,
+  timelineData: TimelineData
 ): Promise<string> {
   const allCompleted = sessions.flatMap(s => s.completedTasks);
   const allDecisions = sessions.flatMap(s => s.decisions);
@@ -2003,16 +2001,16 @@ async function generateEnhancedWeeklySummary(
     }
   });
   
-  const totalHours = sessions.length * 2.5; // Rough estimate
+  // const totalHours = sessions.length * 2.5; // Rough estimate
   
   // Extract metrics from velocity data
   const metrics = velocityData.metrics || {};
   const productivity = metrics.productivity || 'MEDIUM';
   
   // Group timeline events by date
-  const eventsByDate: Record<string, any[]> = {};
+  const eventsByDate: Record<string, TimelineEvent[]> = {};
   if (timelineData && timelineData.events) {
-    timelineData.events.forEach((event: any) => {
+    timelineData.events.forEach((event) => {
       if (!eventsByDate[event.date]) eventsByDate[event.date] = [];
       eventsByDate[event.date].push(event);
     });
@@ -2063,7 +2061,7 @@ ${events.map((e) => {
   const icon = e.type === 'FEATURE' ? '🚀' : 
                e.type === 'DECISION' ? '🤔' : 
                e.type === 'POST' ? '📝' : '📋';
-  const impactIcon = e.impact === 'HIGH' || e.impact === 'high' ? ' 🔥' : '';
+  const impactIcon = e.impact === 'HIGH' ? ' 🔥' : '';
   return `- ${icon}${impactIcon} **${e.title}**
   - 📁 \`${e.file}\`
   - ${e.description || e.type.toLowerCase()}`;
@@ -2135,7 +2133,7 @@ ${velocityData.recommendations ? velocityData.recommendations :
 
 ${(() => {
   // Extract decision titles for better diagram generation
-  const decisionTitles = allDecisions.map((d: any) => d.title || d).filter(Boolean);
+  const decisionTitles = allDecisions.map((d: string | {title?: string}) => typeof d === 'string' ? d : d.title || '').filter(Boolean);
   
   if (decisionTitles.length > 0) {
     // Generate enhanced Mermaid diagrams using our new functions
@@ -2143,7 +2141,7 @@ ${(() => {
       weekNumber,
       year,
       taskDistribution: {
-        features: Math.round((timelineData?.events?.filter((e: any) => e.type === 'FEATURE').length || 0) / Math.max(allCompleted.length, 1) * 100),
+        features: Math.round((timelineData?.events?.filter((e) => e.type === 'FEATURE').length || 0) / Math.max(allCompleted.length, 1) * 100),
         bugs: Math.round((allCompleted.filter((t: string) => t.toLowerCase().includes('fix') || t.toLowerCase().includes('bug')).length) / Math.max(allCompleted.length, 1) * 100),
         research: Math.round((allCompleted.filter((t: string) => t.toLowerCase().includes('research')).length) / Math.max(allCompleted.length, 1) * 100),
         planning: Math.round((allCompleted.filter((t: string) => t.toLowerCase().includes('plan')).length) / Math.max(allCompleted.length, 1) * 100),
@@ -2153,7 +2151,10 @@ ${(() => {
       productivityScore: productivity as 'HIGH' | 'MEDIUM' | 'LOW',
       velocity: Math.round(allCompleted.length / Math.max(sessions.length, 1)),
       decisions: decisionTitles.slice(0, 10),
-      timeline: timelineData?.events || []
+      timeline: timelineData?.events?.map(event => ({
+        task: event.title,
+        completed: true
+      })) || []
     };
     
     const diagrams = generateAllCompressionDiagrams(visualData);
@@ -2179,7 +2180,7 @@ ${(() => {
     const conceptualDiagrams = generateConceptualDiagrams(
       { week: weekNumber },
       allDecisions,
-      timelineData?.events?.filter((e: any) => e.type === 'FEATURE').map((e: any) => e.title) || []
+      timelineData?.events?.filter((e) => e.type === 'FEATURE').map((e) => e.title) || []
     );
     return conceptualDiagrams.length > 0 ? conceptualDiagrams.join('\n\n') : 
       '> No significant architectural changes or feature relationships to visualize this week.';
@@ -2194,10 +2195,10 @@ ${(() => {
   return summary;
 }
 
-function getMostProductiveDay(sessions: any[]): string {
+function getMostProductiveDay(sessions: SessionData[]): string {
   if (sessions.length === 0) return 'N/A';
   
-  const mostProductive = sessions.reduce((best, current) => {
+  const mostProductive = sessions.reduce((best: SessionData, current: SessionData) => {
     return current.completedTasks.length > best.completedTasks.length ? current : best;
   });
   
@@ -2296,7 +2297,7 @@ async function generateTestChecklist(feature: string) {
   };
 }
 
-function generatePriorityTests(testCategories: any) {
+function generatePriorityTests(testCategories: TestCategories) {
   const priority = [];
   
   // High priority: regression and security
@@ -2314,7 +2315,7 @@ function generatePriorityTests(testCategories: any) {
   return priority;
 }
 
-function calculateTestingTime(testCategories: any) {
+function calculateTestingTime(testCategories: TestCategories) {
   const timeEstimates = {
     unit: 0.5, // 30 minutes per unit test
     integration: 1, // 1 hour per integration test
@@ -2325,14 +2326,14 @@ function calculateTestingTime(testCategories: any) {
   };
   
   let totalHours = 0;
-  Object.entries(testCategories).forEach(([category, tests]: [string, any]) => {
+  Object.entries(testCategories).forEach(([category, tests]) => {
     totalHours += tests.length * (timeEstimates[category as keyof typeof timeEstimates] || 1);
   });
   
   return {
     totalHours: Math.round(totalHours * 10) / 10,
     totalDays: Math.round((totalHours / 8) * 10) / 10,
-    breakdown: Object.entries(testCategories).map(([category, tests]: [string, any]) => ({
+    breakdown: Object.entries(testCategories).map(([category, tests]) => ({
       category,
       count: tests.length,
       hours: Math.round(tests.length * (timeEstimates[category as keyof typeof timeEstimates] || 1) * 10) / 10
@@ -2399,7 +2400,7 @@ server.registerTool(
       security: '🔐'
     };
     
-    Object.entries(checklist.testCategories).forEach(([category, tests]: [string, any]) => {
+    Object.entries(checklist.testCategories).forEach(([category, tests]) => {
       if (tests.length > 0) {
         const icon = categoryIcons[category as keyof typeof categoryIcons] || '📝';
         result += `${icon} **${category.toUpperCase()} TESTS**:\n`;
@@ -2930,7 +2931,7 @@ server.registerTool(
     },
   },
   async ({ feature, approach, research_query, doc_links, context }): Promise<CallToolResult> => {
-    let researchData = null;
+    let researchData: ResearchItem[] | null = null;
     let planContent = '';
     
     // Step 1: Gather research based on approach
@@ -2941,7 +2942,7 @@ server.registerTool(
         researchData = existingResearch.map(r => ({
           source: r.file,
           content: r.parsedContent || r.fullContent,
-          findings: r.tags?.key_findings || []
+          findings: (r.tags?.key_findings as string[]) || []
         }));
         planContent += `📚 Found ${existingResearch.length} existing research entries\n\n`;
       } else {
@@ -2979,7 +2980,7 @@ server.registerTool(
     // Add research summary if available
     if (researchData) {
       planContent += `## 📚 Research Summary\n`;
-      researchData.forEach((r: any) => {
+      researchData.forEach((r: ResearchItem) => {
         planContent += `- ${r.source}: ${r.findings.slice(0, 3).join(', ')}\n`;
       });
       planContent += `\n`;
@@ -2991,7 +2992,7 @@ server.registerTool(
     
     planContent += `## ⚠️ Potential Conflicts\n`;
     if (codebaseAnalysis.conflicts.length > 0) {
-      planContent += codebaseAnalysis.conflicts.map((c: any) => `- ${c.component}: ${c.reason}`).join('\n');
+      planContent += codebaseAnalysis.conflicts.map((c) => `- ${c.component}: ${c.reason}`).join('\n');
     } else {
       planContent += `- No conflicts detected\n`;
     }
@@ -3022,7 +3023,7 @@ server.registerTool(
 );
 
 // Helper function to analyze codebase
-async function analyzeCodebaseForFeature(feature: string) {
+async function analyzeCodebaseForFeature(feature: string): Promise<CodebaseAnalysis> {
   // Search for similar patterns, potential conflicts, etc.
   const featureLower = feature.toLowerCase();
   const checklist = [];
@@ -3177,10 +3178,10 @@ server.registerTool(
   async ({ context }): Promise<CallToolResult> => {
     // Get all incomplete work
     const pending = await searchDevlogs('', 'all', { status: ['planned', 'in-progress', 'blocked'] });
-    const features = await searchDevlogs('', 'features');
+    // const features = await searchDevlogs('', 'features');
     
     // Analyze current workspace
-    const workspace = await getCurrentWorkspace();
+    // const workspace = await getCurrentWorkspace();
     
     let suggestions = `# 🎯 What's Next?\n\n`;
     

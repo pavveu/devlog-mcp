@@ -18,13 +18,13 @@ import {
 // Type definitions for test results
 type TestSuccess = {
   id: string;
-  result: any;
+  result: CallToolResult;
   success: true;
 };
 
 type TestFailure = {
   id: string;
-  error: any;
+  error: Error | unknown;
   success: false;
 };
 
@@ -134,7 +134,7 @@ async function runStressTest(client: Client): Promise<void> {
       })),
       
       // Search devlogs with different queries (8)
-      ...['refactoring', 'feature', 'bug', 'performance', 'security', 'test', 'documentation', 'architecture'].map((query, i) => ({
+      ...['refactoring', 'feature', 'bug', 'performance', 'security', 'test', 'documentation', 'architecture'].map((query, _i) => ({
         id: `search-${query}`,
         request: {
           method: 'tools/call',
@@ -223,7 +223,7 @@ async function runStressTest(client: Client): Promise<void> {
     if (failed > 0) {
       console.log('\n❌ Failed calls:');
       results.filter((r): r is TestFailure => !r.success).forEach(r => {
-        console.log(`   - ${r.id}: ${r.error?.message || 'Unknown error'}`);
+        console.log(`   - ${r.id}: ${(r.error instanceof Error ? r.error.message : String(r.error)) || 'Unknown error'}`);
       });
     }
 

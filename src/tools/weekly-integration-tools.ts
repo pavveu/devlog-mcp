@@ -278,12 +278,13 @@ export const weeklyIntegrationTools: ToolDefinition[] = [
       effort: z.string().optional().describe('Estimated effort (1h, 4h, 1d, etc.)'),
       id: z.string().optional().describe('Optional ID for linking to tracked item'),
     },
-    handler: async ({ type, title, priority, effort, id }): Promise<CallToolResult> => {
+    handler: async (args: { type: string; title: string; priority?: string; effort?: string; id?: string }): Promise<CallToolResult> => {
+      const { type, title, priority, effort, id } = args;
       try {
         const item: WeeklyItem = {
           type,
           title,
-          priority,
+          priority: priority || 'medium',
           effort,
           id,
           status: 'pending',
@@ -323,7 +324,8 @@ export const weeklyIntegrationTools: ToolDefinition[] = [
     inputSchema: {
       dry_run: z.boolean().default(false).describe('Preview changes without making them'),
     },
-    handler: async ({ dry_run }): Promise<CallToolResult> => {
+    handler: async (args: { dry_run?: boolean }): Promise<CallToolResult> => {
+      const { dry_run } = args;
       try {
         const items = await extractItemsFromCurrent();
         
@@ -422,7 +424,8 @@ export const weeklyIntegrationTools: ToolDefinition[] = [
       include_time: z.boolean().default(false).describe('Include time tracking analysis'),
       include_summary: z.boolean().default(true).describe('Include progress summary'),
     },
-    handler: async ({ include_time, include_summary }): Promise<CallToolResult> => {
+    handler: async (args: { include_time?: boolean; include_summary?: boolean }): Promise<CallToolResult> => {
+      const { include_time, include_summary } = args;
       try {
         const { content } = await parseCurrentWeek();
         
@@ -589,7 +592,7 @@ export const weeklyIntegrationTools: ToolDefinition[] = [
                 }
               }
             }
-          } catch (e) {
+          } catch {
             output += `- Time tracking data not available\n`;
           }
           

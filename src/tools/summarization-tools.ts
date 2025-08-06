@@ -3,8 +3,10 @@
  * Provides tools for generating summaries of devlog content
  */
 
+import { z } from 'zod';
 import { ToolDefinition } from './registry.js';
 import { summarizer } from './summarizer.js';
+import { CallToolResult } from '../types.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import matter from 'gray-matter';
@@ -15,32 +17,13 @@ export const summarizationTools: ToolDefinition[] = [
     title: 'Summarize Content',
     description: 'Generate a summary of devlog content',
     inputSchema: {
-      type: 'object',
-      properties: {
-        content: {
-          type: 'string',
-          description: 'Content to summarize'
-        },
-        maxWords: {
-          type: 'number',
-          default: 100,
-          description: 'Maximum words in summary'
-        },
-        style: {
-          type: 'string',
-          enum: ['bullets', 'paragraph', 'structured'],
-          default: 'paragraph',
-          description: 'Summary style'
-        },
-        focusOn: {
-          type: 'array',
-          items: { type: 'string' },
-          description: 'Keywords to focus on'
-        }
-      },
-      required: ['content']
+      content: z.string().describe('Content to summarize'),
+      maxWords: z.number().default(100).describe('Maximum words in summary'),
+      style: z.enum(['bullets', 'paragraph', 'structured']).default('paragraph').describe('Summary style'),
+      focusOn: z.array(z.string()).optional().describe('Keywords to focus on')
     },
-    handler: async ({ content, maxWords = 100, style = 'paragraph', focusOn = [] }: any) => {
+    handler: async (args: { content: string; maxWords?: number; style?: 'bullets' | 'paragraph' | 'structured'; focusOn?: string[] }): Promise<CallToolResult> => {
+      const { content, maxWords = 100, style = 'paragraph', focusOn = [] } = args;
       try {
         const summary = await summarizer.summarize(content, {
           maxLength: maxWords,
@@ -49,20 +32,28 @@ export const summarizationTools: ToolDefinition[] = [
         });
 
         return {
-          summary: summary.text,
-          style: summary.style,
-          metadata: {
-            originalWords: content.split(/\s+/).length,
-            summaryWords: summary.metadata?.wordCount,
-            compression: `${(summary.metadata?.compressionRatio ? summary.metadata.compressionRatio * 100 : 0).toFixed(1)}%`,
-            keywords: summary.keywords
-          },
-          keyPoints: summary.keyPoints
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              summary: summary.text,
+              style: summary.style,
+              metadata: {
+                originalWords: content.split(/\s+/).length,
+                summaryWords: summary.metadata?.wordCount,
+                compression: `${(summary.metadata?.compressionRatio ? summary.metadata.compressionRatio * 100 : 0).toFixed(1)}%`,
+                keywords: summary.keywords
+              },
+              keyPoints: summary.keyPoints
+            }, null, 2)
+          }]
         };
       } catch (error) {
         return {
-          error: `Failed to summarize: ${(error as Error).message}`,
-          summary: ''
+          content: [{
+            type: 'text',
+            text: `Failed to summarize: ${(error as Error).message}`
+          }],
+          isError: true
         };
       }
     }
@@ -73,26 +64,12 @@ export const summarizationTools: ToolDefinition[] = [
     title: 'Summarize File',
     description: 'Summarize a specific devlog file',
     inputSchema: {
-      type: 'object',
-      properties: {
-        file: {
-          type: 'string',
-          description: 'File path to summarize'
-        },
-        maxWords: {
-          type: 'number',
-          default: 150,
-          description: 'Maximum words'
-        },
-        includeMetadata: {
-          type: 'boolean',
-          default: true,
-          description: 'Include file metadata in summary'
-        }
-      },
-      required: ['file']
+      file: z.string().describe('File path to summarize'),
+      maxWords: z.number().default(150).describe('Maximum words'),
+      includeMetadata: z.boolean().default(true).describe('Include file metadata in summary')
     },
-    handler: async ({ file, maxWords = 150, includeMetadata = true }: any) => {
+    handler: async (args: { file: string; maxWords?: number; includeMetadata?: boolean }): Promise<CallToolResult> => {
+      const { file, maxWords = 150, includeMetadata = true } = args;
       try {
         const devlogPath = process.env.DEVLOG_PATH || path.join(process.cwd(), 'devlog');
         const filePath = path.join(devlogPath, file);
@@ -125,11 +102,19 @@ export const summarizationTools: ToolDefinition[] = [
           });
         }
 
-        return result;
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(result, null, 2)
+          }]
+        };
       } catch (error) {
         return {
-          error: `Failed to summarize file: ${(error as Error).message}`,
-          file
+          content: [{
+            type: 'text',
+            text: `Failed to summarize file: ${(error as Error).message}`
+          }],
+          isError: true
         };
       }
     }
@@ -140,31 +125,13 @@ export const summarizationTools: ToolDefinition[] = [
     title: 'Batch Summarize',
     description: 'Summarize multiple devlog files',
     inputSchema: {
-      type: 'object',
-      properties: {
-        pattern: {
-          type: 'string',
-          default: '**/*.md',
-          description: 'File pattern to match'
-        },
-        directory: {
-          type: 'string',
-          default: 'devlog',
-          description: 'Directory to search'
-        },
-        maxFiles: {
-          type: 'number',
-          default: 10,
-          description: 'Maximum files to process'
-        },
-        maxWordsPerSummary: {
-          type: 'number',
-          default: 50,
-          description: 'Max words per summary'
-        }
-      }
+      pattern: z.string().default('**/*.md').describe('File pattern to match'),
+      directory: z.string().default('devlog').describe('Directory to search'),
+      maxFiles: z.number().default(10).describe('Maximum files to process'),
+      maxWordsPerSummary: z.number().default(50).describe('Max words per summary')
     },
-    handler: async ({ pattern = '**/*.md', directory = 'devlog', maxFiles = 10, maxWordsPerSummary = 50 }: any) => {
+    handler: async (args: { pattern?: string; directory?: string; maxFiles?: number; maxWordsPerSummary?: number }): Promise<CallToolResult> => {
+      const { pattern = '**/*.md', directory = 'devlog', maxFiles = 10, maxWordsPerSummary = 50 } = args;
       try {
         const glob = (await import('glob')).glob;
         const files = await glob(pattern, { cwd: directory });
@@ -193,14 +160,22 @@ export const summarizationTools: ToolDefinition[] = [
         }
 
         return {
-          processed: results.length,
-          summaries: results,
-          recommendation: generateBatchRecommendation(results)
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              processed: results.length,
+              summaries: results,
+              recommendation: generateBatchRecommendation(results)
+            }, null, 2)
+          }]
         };
       } catch (error) {
         return {
-          error: `Failed to batch summarize: ${(error as Error).message}`,
-          processed: 0
+          content: [{
+            type: 'text',
+            text: `Failed to batch summarize: ${(error as Error).message}`
+          }],
+          isError: true
         };
       }
     }
@@ -211,22 +186,11 @@ export const summarizationTools: ToolDefinition[] = [
     title: 'Timeline Summary',
     description: 'Generate a timeline summary of devlog entries',
     inputSchema: {
-      type: 'object',
-      properties: {
-        period: {
-          type: 'string',
-          enum: ['day', 'week', 'month'],
-          default: 'week',
-          description: 'Time period to summarize'
-        },
-        directory: {
-          type: 'string',
-          default: 'devlog',
-          description: 'Directory to analyze'
-        }
-      }
+      period: z.enum(['day', 'week', 'month']).default('week').describe('Time period to summarize'),
+      directory: z.string().default('devlog').describe('Directory to analyze')
     },
-    handler: async ({ period = 'week', directory = 'devlog' }: any) => {
+    handler: async (args: { period?: 'day' | 'week' | 'month'; directory?: string }): Promise<CallToolResult> => {
+      const { period = 'week', directory = 'devlog' } = args;
       try {
         const glob = (await import('glob')).glob;
         const files = await glob('**/*.md', { cwd: directory });
@@ -295,7 +259,7 @@ export const summarizationTools: ToolDefinition[] = [
             summary.keywords?.forEach(keyword => {
               themes.set(keyword, (themes.get(keyword) || 0) + 1);
             });
-          } catch (err) {
+          } catch {
             // Skip files with errors
           }
         }
@@ -315,26 +279,34 @@ export const summarizationTools: ToolDefinition[] = [
           .map(e => `${e.date.toISOString().split('T')[0]}: ${e.summary}`);
 
         return {
-          period,
-          dateRange: {
-            from: startDate.toISOString().split('T')[0],
-            to: now.toISOString().split('T')[0]
-          },
-          entries: timelineEntries.length,
-          highlights,
-          themes: topThemes,
-          progress: {
-            completed: `${progress.completed.length} items`,
-            inProgress: `${progress.inProgress.length} items`,
-            planned: `${progress.planned.length} items`,
-            details: progress
-          },
-          summary: generateTimelineSummary(timelineEntries, period)
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              period,
+              dateRange: {
+                from: startDate.toISOString().split('T')[0],
+                to: now.toISOString().split('T')[0]
+              },
+              entries: timelineEntries.length,
+              highlights,
+              themes: topThemes,
+              progress: {
+                completed: `${progress.completed.length} items`,
+                inProgress: `${progress.inProgress.length} items`,
+                planned: `${progress.planned.length} items`,
+                details: progress
+              },
+              summary: generateTimelineSummary(timelineEntries, period)
+            }, null, 2)
+          }]
         };
       } catch (error) {
         return {
-          error: `Failed to generate timeline: ${(error as Error).message}`,
-          period
+          content: [{
+            type: 'text',
+            text: `Failed to generate timeline: ${(error as Error).message}`
+          }],
+          isError: true
         };
       }
     }
@@ -345,21 +317,11 @@ export const summarizationTools: ToolDefinition[] = [
     title: 'Smart Digest',
     description: 'Generate an intelligent digest of recent activity',
     inputSchema: {
-      type: 'object',
-      properties: {
-        focusAreas: {
-          type: 'array',
-          items: { type: 'string' },
-          description: 'Areas to focus on (e.g., features, bugs, research)'
-        },
-        days: {
-          type: 'number',
-          default: 7,
-          description: 'Number of days to include'
-        }
-      }
+      focusAreas: z.array(z.string()).optional().describe('Areas to focus on (e.g., features, bugs, research)'),
+      days: z.number().default(7).describe('Number of days to include')
     },
-    handler: async ({ focusAreas = [], days = 7 }: any) => {
+    handler: async (args: { focusAreas?: string[]; days?: number }): Promise<CallToolResult> => {
+      const { focusAreas = [], days = 7 } = args;
       try {
         const glob = (await import('glob')).glob;
         const files = await glob('**/*.md', { cwd: 'devlog' });
@@ -411,7 +373,7 @@ export const summarizationTools: ToolDefinition[] = [
             // Track insights
             const category = extractCategory(file, parsed.data.tags);
             insights.categories.set(category, (insights.categories.get(category) || 0) + 1);
-          } catch (err) {
+          } catch {
             // Skip errors
           }
         }
@@ -440,10 +402,19 @@ export const summarizationTools: ToolDefinition[] = [
           recommendations: generateDigestRecommendations(relevantEntries, insights)
         };
 
-        return digest;
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(digest, null, 2)
+          }]
+        };
       } catch (error) {
         return {
-          error: `Failed to generate digest: ${(error as Error).message}`
+          content: [{
+            type: 'text',
+            text: `Failed to generate digest: ${(error as Error).message}`
+          }],
+          isError: true
         };
       }
     }
@@ -451,7 +422,7 @@ export const summarizationTools: ToolDefinition[] = [
 ];
 
 // Helper functions
-function generateBatchRecommendation(results: any[]): string {
+function generateBatchRecommendation(results: Array<{ wordCount?: number }>): string {
   const avgWords = results.reduce((sum, r) => sum + (r.wordCount || 0), 0) / results.length;
   
   if (avgWords > 100) {
@@ -463,7 +434,7 @@ function generateBatchRecommendation(results: any[]): string {
   return 'Good balance of content across entries';
 }
 
-function generateTimelineSummary(entries: any[], period: string): string {
+function generateTimelineSummary(entries: Array<{ status?: string }>, period: string): string {
   if (entries.length === 0) return `No activity in the last ${period}`;
   
   const completed = entries.filter(e => e.status === 'completed').length;
@@ -472,7 +443,7 @@ function generateTimelineSummary(entries: any[], period: string): string {
   return `${entries.length} entries in the last ${period}: ${completed} completed, ${active} in progress`;
 }
 
-function extractCategory(file: string, tags: any): string {
+function extractCategory(file: string, tags: unknown): string {
   // Extract from tags
   if (Array.isArray(tags)) {
     const typeTag = tags.find((t: string) => t.startsWith('type:'));
@@ -488,7 +459,7 @@ function extractCategory(file: string, tags: any): string {
   return 'general';
 }
 
-function generateHighlights(entries: any[]): string[] {
+function generateHighlights(entries: Array<{ summary: string }>): string[] {
   const highlights = [];
   
   // Most recent important entry
@@ -510,7 +481,7 @@ function generateHighlights(entries: any[]): string[] {
   return highlights;
 }
 
-function generateDigestRecommendations(entries: any[], insights: any): string[] {
+function generateDigestRecommendations(entries: Array<{ date: Date }>, insights: { categories: Map<string, number> }): string[] {
   const recommendations = [];
   
   // Check productivity

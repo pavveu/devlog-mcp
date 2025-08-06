@@ -3,9 +3,11 @@
  * Integrates smart tagging into the DevLog MCP server
  */
 
+import { z } from 'zod';
 import { ToolDefinition } from './registry.js';
 import { smartTagger } from './ai-smart-tagger.js';
 import { tagTaxonomy } from './tag-taxonomy.js';
+import { CallToolResult } from '../types.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import matter from 'gray-matter';
@@ -16,31 +18,12 @@ export const aiTaggingTools: ToolDefinition[] = [
     title: 'Auto Tag Content',
     description: 'Automatically suggest tags for devlog content',
     inputSchema: {
-      type: 'object',
-      properties: {
-        content: { 
-          type: 'string', 
-          description: 'Devlog content to analyze' 
-        },
-        threshold: { 
-          type: 'number', 
-          default: 0.6, 
-          description: 'Confidence threshold (0-1)' 
-        },
-        categories: { 
-          type: 'array', 
-          items: { type: 'string' },
-          description: 'Specific categories to focus on'
-        },
-        existingTags: {
-          type: 'array',
-          items: { type: 'string' },
-          description: 'Current tags to improve upon'
-        }
-      },
-      required: ['content']
+      content: z.string().describe('Devlog content to analyze'),
+      threshold: z.number().optional().default(0.6).describe('Confidence threshold (0-1)'),
+      categories: z.array(z.string()).optional().describe('Specific categories to focus on'),
+      existingTags: z.array(z.string()).optional().describe('Current tags to improve upon')
     },
-    handler: async ({ content, threshold = 0.6, categories, existingTags }: any) => {
+    handler: async ({ content, threshold = 0.6, categories, existingTags }): Promise<CallToolResult> => {
       try {
         const result = await smartTagger.analyzeContent(content, {
           threshold,
@@ -55,19 +38,34 @@ export const aiTaggingTools: ToolDefinition[] = [
         }
 
         return {
-          suggestions: result.suggestions,
-          metadata: result.metadata,
-          improvements,
-          summary: {
-            totalSuggestions: result.suggestions.length,
-            highConfidence: result.suggestions.filter((s: any) => s.confidence > 0.8).length,
-            categories: [...new Set(result.suggestions.map((s: any) => s.category))]
-          }
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                suggestions: result.suggestions,
+                metadata: result.metadata,
+                improvements,
+                summary: {
+                  totalSuggestions: result.suggestions.length,
+                  highConfidence: result.suggestions.filter(s => s.confidence > 0.8).length,
+                  categories: [...new Set(result.suggestions.map(s => s.category))]
+                }
+              }, null, 2)
+            }
+          ]
         };
       } catch (error) {
         return {
-          error: `Failed to analyze content: ${(error as Error).message}`,
-          suggestions: []
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                error: `Failed to analyze content: ${(error as Error).message}`,
+                suggestions: []
+              }, null, 2)
+            }
+          ],
+          isError: true
         };
       }
     }
@@ -78,32 +76,31 @@ export const aiTaggingTools: ToolDefinition[] = [
     title: 'Validate Tags',
     description: 'Validate tags against the taxonomy',
     inputSchema: {
-      type: 'object',
-      properties: {
-        tags: {
-          type: 'array',
-          items: { type: 'string' },
-          description: 'Tags to validate'
-        }
-      },
-      required: ['tags']
+      tags: z.array(z.string()).describe('Tags to validate')
     },
-    handler: async ({ tags }: any) => {
+    handler: async ({ tags }): Promise<CallToolResult> => {
       const validation = tagTaxonomy.validateTags(tags);
       
       return {
-        valid: validation.valid,
-        invalid: validation.invalid,
-        conflicts: validation.conflicts,
-        normalized: tags.map((tag: string) => ({
-          original: tag,
-          normalized: tagTaxonomy.normalizeTag(tag) || tag,
-          isValid: tagTaxonomy.isValidTag(tag)
-        })),
-        suggestions: validation.invalid.map((tag: string) => ({
-          invalid: tag,
-          suggestions: tagTaxonomy.suggestTags(tag).slice(0, 3)
-        }))
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              valid: validation.valid,
+              invalid: validation.invalid,
+              conflicts: validation.conflicts,
+              normalized: tags.map((tag: string) => ({
+                original: tag,
+                normalized: tagTaxonomy.normalizeTag(tag) || tag,
+                isValid: tagTaxonomy.isValidTag(tag)
+              })),
+              suggestions: validation.invalid.map((tag: string) => ({
+                invalid: tag,
+                suggestions: tagTaxonomy.suggestTags(tag).slice(0, 3)
+              }))
+            }, null, 2)
+          }
+        ]
       };
     }
   },
@@ -113,31 +110,12 @@ export const aiTaggingTools: ToolDefinition[] = [
     title: 'Batch Tag Analysis',
     description: 'Analyze and tag multiple devlog entries',
     inputSchema: {
-      type: 'object',
-      properties: {
-        directory: {
-          type: 'string',
-          description: 'Directory containing devlog files',
-          default: 'devlog'
-        },
-        pattern: {
-          type: 'string',
-          description: 'File pattern to match (glob)',
-          default: '**/*.md'
-        },
-        dryRun: {
-          type: 'boolean',
-          description: 'Preview changes without applying',
-          default: true
-        },
-        threshold: {
-          type: 'number',
-          description: 'Confidence threshold',
-          default: 0.7
-        }
-      }
+      directory: z.string().optional().default('devlog').describe('Directory containing devlog files'),
+      pattern: z.string().optional().default('**/*.md').describe('File pattern to match (glob)'),
+      dryRun: z.boolean().optional().default(true).describe('Preview changes without applying'),
+      threshold: z.number().optional().default(0.7).describe('Confidence threshold')
     },
-    handler: async ({ directory = 'devlog', pattern = '**/*.md', dryRun = true, threshold = 0.7 }: any) => {
+    handler: async ({ directory = 'devlog', pattern = '**/*.md', dryRun = true, threshold = 0.7 }): Promise<CallToolResult> => {
       const glob = (await import('glob')).glob;
       const files = await glob(pattern, { cwd: directory });
       
@@ -145,7 +123,7 @@ export const aiTaggingTools: ToolDefinition[] = [
         processed: 0,
         updated: 0,
         errors: 0,
-        files: [] as any[]
+        files: [] as Array<{ path: string; currentTags?: string[]; suggestedTags?: string[]; allTags?: string[]; applied?: boolean; error?: string }>
       };
 
       for (const file of files) {
@@ -167,8 +145,8 @@ export const aiTaggingTools: ToolDefinition[] = [
           
           // Get tags to add
           const newTags = result.suggestions
-            .filter((s: any) => !currentTags.includes(s.tag))
-            .map((s: any) => s.tag);
+            .filter(s => !currentTags.includes(s.tag))
+            .map(s => s.tag);
 
           if (newTags.length > 0) {
             const updatedTags = [...new Set([...currentTags, ...newTags])];
@@ -201,9 +179,16 @@ export const aiTaggingTools: ToolDefinition[] = [
       }
 
       return {
-        ...results,
-        summary: `Processed ${results.processed} files, ${results.updated} updated, ${results.errors} errors`,
-        dryRun
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              ...results,
+              summary: `Processed ${results.processed} files, ${results.updated} updated, ${results.errors} errors`,
+              dryRun
+            }, null, 2)
+          }
+        ]
       };
     }
   },
@@ -213,16 +198,9 @@ export const aiTaggingTools: ToolDefinition[] = [
     title: 'Tag Statistics',
     description: 'Get statistics about tag usage',
     inputSchema: {
-      type: 'object',
-      properties: {
-        directory: {
-          type: 'string',
-          description: 'Directory to analyze',
-          default: 'devlog'
-        }
-      }
+      directory: z.string().optional().default('devlog').describe('Directory to analyze')
     },
-    handler: async ({ directory = 'devlog' }: any) => {
+    handler: async ({ directory = 'devlog' }): Promise<CallToolResult> => {
       const glob = (await import('glob')).glob;
       const files = await glob('**/*.md', { cwd: directory });
       
@@ -272,7 +250,7 @@ export const aiTaggingTools: ToolDefinition[] = [
               }
             }
           }
-        } catch (error) {
+        } catch {
           // Skip files with errors
         }
       }
@@ -300,17 +278,24 @@ export const aiTaggingTools: ToolDefinition[] = [
         .slice(0, 10);
 
       return {
-        summary: {
-          totalFiles,
-          taggedFiles,
-          coveragePercent: (taggedFiles / totalFiles * 100).toFixed(1),
-          uniqueTags: tagCounts.size,
-          avgTagsPerFile: (Array.from(tagCounts.values()).reduce((a, b) => a + b, 0) / taggedFiles).toFixed(1)
-        },
-        topTags,
-        categoryStats,
-        topTagPairs: topPairs,
-        recommendations: generateTagRecommendations(tagCounts, taggedFiles)
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              summary: {
+                totalFiles,
+                taggedFiles,
+                coveragePercent: (taggedFiles / totalFiles * 100).toFixed(1),
+                uniqueTags: tagCounts.size,
+                avgTagsPerFile: (Array.from(tagCounts.values()).reduce((a, b) => a + b, 0) / taggedFiles).toFixed(1)
+              },
+              topTags,
+              categoryStats,
+              topTagPairs: topPairs,
+              recommendations: generateTagRecommendations(tagCounts, taggedFiles)
+            }, null, 2)
+          }
+        ]
       };
     }
   },
@@ -320,21 +305,10 @@ export const aiTaggingTools: ToolDefinition[] = [
     title: 'Suggest Tags',
     description: 'Get real-time tag suggestions for partial content',
     inputSchema: {
-      type: 'object',
-      properties: {
-        content: {
-          type: 'string',
-          description: 'Partial content being written'
-        },
-        existingTags: {
-          type: 'array',
-          items: { type: 'string' },
-          description: 'Already selected tags'
-        }
-      },
-      required: ['content']
+      content: z.string().describe('Partial content being written'),
+      existingTags: z.array(z.string()).optional().default([]).describe('Already selected tags')
     },
-    handler: async ({ content, existingTags = [] }: any) => {
+    handler: async ({ content, existingTags = [] }): Promise<CallToolResult> => {
       const suggestions = await smartTagger.getSuggestions(content, existingTags);
       
       // Get tag definitions for rich display
@@ -349,8 +323,15 @@ export const aiTaggingTools: ToolDefinition[] = [
       });
 
       return {
-        suggestions: enrichedSuggestions,
-        hint: content.length < 50 ? 'Type more content for better suggestions' : null
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              suggestions: enrichedSuggestions,
+              hint: content.length < 50 ? 'Type more content for better suggestions' : null
+            }, null, 2)
+          }
+        ]
       };
     }
   }

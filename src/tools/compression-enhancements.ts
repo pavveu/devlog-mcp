@@ -24,7 +24,7 @@ export interface ActiveHoursData {
 }
 
 // Generate ASCII activity matrix with late evening
-export function generateActivityMatrix(sessions: any[]): string {
+export function generateActivityMatrix(sessions: Array<{ date?: Date; file?: string; completedTasks?: unknown[]; [key: string]: unknown }>): string {
   const matrix: WeekActivityMatrix = {
     Mon: { morning: 0, afternoon: 0, evening: 0, lateEvening: 0 },
     Tue: { morning: 0, afternoon: 0, evening: 0, lateEvening: 0 },
@@ -36,7 +36,7 @@ export function generateActivityMatrix(sessions: any[]): string {
   };
   
   // Analyze session times and duration
-  sessions.forEach(session => {
+  sessions.forEach((session) => {
     const dayName = session.date?.toLocaleDateString('en-US', { weekday: 'short' }) || 'Mon';
     const hour = extractSessionHour(session);
     const sessionHours = estimateSessionDuration(session);
@@ -70,7 +70,7 @@ export function generateActivityMatrix(sessions: any[]): string {
 }
 
 // Estimate session duration based on content and context
-function estimateSessionDuration(session: any): number {
+function estimateSessionDuration(session: { completedTasks?: unknown[]; filesCreated?: number; file?: string; dump_reason?: unknown }): number {
   // Base duration on task count and content complexity
   const tasks = session.completedTasks?.length || 0;
   const files = session.filesCreated || 0;
@@ -94,13 +94,13 @@ function estimateSessionDuration(session: any): number {
 }
 
 // Calculate active hours from sessions
-export function calculateActiveHours(sessions: any[]): ActiveHoursData {
+export function calculateActiveHours(sessions: Array<{ date?: Date; completedTasks?: unknown[]; [key: string]: unknown }>): ActiveHoursData {
   const hourActivity: Record<number, number> = {};
   const dailyHours: Record<string, number> = {};
   let totalMinutes = 0;
   
   // Track activity by hour and day
-  sessions.forEach(session => {
+  sessions.forEach((session) => {
     const hour = extractSessionHour(session);
     const dayKey = session.date?.toISOString().split('T')[0] || '2025-06-23';
     
@@ -188,15 +188,14 @@ export function generateActiveHoursVisualization(activeHours: ActiveHoursData): 
 }
 
 // Extract hour from session filename or date
-function extractSessionHour(session: any): number {
+function extractSessionHour(session: { file?: string; date?: Date; [key: string]: unknown }): number {
   // Try to extract from filename first (e.g., "23h21")
   if (session.file) {
     const hourMatch = session.file.match(/(\d{2})h\d{2}/);
     if (hourMatch) {
-      let hour = parseInt(hourMatch[1]);
+      const hour = parseInt(hourMatch[1]);
       // Handle 24+ hour format (25h22 = 1:22 AM next day)
-      if (hour >= 24) hour = hour - 24;
-      return hour;
+      return hour >= 24 ? hour - 24 : hour;
     }
   }
   
@@ -209,10 +208,10 @@ function extractSessionHour(session: any): number {
 }
 
 // Generate 24-hour activity clock
-export function generateActivityClock(sessions: any[]): string {
+export function generateActivityClock(sessions: Array<{ completedTasks?: unknown[]; [key: string]: unknown }>): string {
   const hourCounts: number[] = new Array(24).fill(0);
   
-  sessions.forEach(session => {
+  sessions.forEach((session) => {
     const hour = extractSessionHour(session);
     // Weight by completed tasks, minimum 1 for any session
     const activity = Math.max(session.completedTasks?.length || 1, 1);
@@ -268,7 +267,7 @@ export function generateProgressBar(completed: number, total: number): string {
 
 // Generate conceptual Mermaid diagrams based on week's content
 export function generateConceptualDiagrams(
-  timeline: any,
+  timeline: { week: number },
   decisions: string[],
   features: string[]
 ): string[] {
@@ -363,8 +362,6 @@ export function generateTaskDistribution(
   
   let output = '📊 Task Distribution\n';
   categories.forEach(cat => {
-    const percentage = (cat.count / total) * 100;
-    const bars = Math.round(percentage / 5);
     output += `${cat.char} ${cat.name.padEnd(10)} ${generateProgressBar(cat.count, total)} ${cat.count}\n`;
   });
   
@@ -373,8 +370,8 @@ export function generateTaskDistribution(
 
 // Generate weekly trend indicators
 export function generateTrendIndicators(
-  currentWeek: any,
-  previousWeek?: any
+  currentWeek: { tasks?: number; decisions?: number; files?: number },
+  previousWeek?: { tasks?: number; decisions?: number; files?: number }
 ): string {
   let output = '📈 Week-over-Week Trends\n';
   
@@ -390,9 +387,9 @@ export function generateTrendIndicators(
     return `${color} ${metric}: ${current} ${arrow} (${change}%)`;
   };
   
-  output += compare(currentWeek.tasks, previousWeek.tasks, 'Tasks') + '\n';
-  output += compare(currentWeek.decisions, previousWeek.decisions, 'Decisions') + '\n';
-  output += compare(currentWeek.files, previousWeek.files, 'Files') + '\n';
+  output += compare(currentWeek.tasks || 0, previousWeek.tasks || 0, 'Tasks') + '\n';
+  output += compare(currentWeek.decisions || 0, previousWeek.decisions || 0, 'Decisions') + '\n';
+  output += compare(currentWeek.files || 0, previousWeek.files || 0, 'Files') + '\n';
   
   return output;
 }

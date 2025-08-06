@@ -8,8 +8,21 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import matter from 'gray-matter';
 import { glob } from 'glob';
+import { z } from 'zod';
+import { CallToolResult } from '../types.js';
 
 const DEVLOG_PATH = process.env.DEVLOG_PATH || path.join(process.cwd(), 'devlog');
+
+interface CurrentWorkspaceParams {
+  includeDays?: number;
+  preserveSections?: string[];
+}
+
+interface UpdateSectionParams {
+  section: string;
+  content: string;
+  append?: boolean;
+}
 
 export const currentWorkspaceTools: ToolDefinition[] = [
   {
@@ -17,32 +30,21 @@ export const currentWorkspaceTools: ToolDefinition[] = [
     title: 'Regenerate Current Workspace',
     description: 'Auto-generate or update current.md based on recent activity',
     inputSchema: {
-      type: 'object',
-      properties: {
-        includeDays: {
-          type: 'number',
-          default: 7,
-          description: 'Days of history to analyze'
-        },
-        preserveSections: {
-          type: 'array',
-          items: { type: 'string' },
-          description: 'Sections to preserve from existing current.md'
-        }
-      }
+      includeDays: z.number().optional().default(7).describe('Days of history to analyze'),
+      preserveSections: z.array(z.string()).optional().describe('Sections to preserve from existing current.md')
     },
-    handler: async ({ includeDays = 7, preserveSections = [] }: any) => {
+    handler: async ({ includeDays = 7, preserveSections = [] }: CurrentWorkspaceParams): Promise<CallToolResult> => {
       try {
         const currentPath = path.join(DEVLOG_PATH, 'current.md');
         
         // Read existing current.md if it exists
         let existingContent = '';
-        let existingData: any = {};
+        let existingData: Record<string, unknown> = {};
         try {
           existingContent = await fs.readFile(currentPath, 'utf-8');
           const parsed = matter(existingContent);
           existingData = parsed.data;
-        } catch (err) {
+        } catch {
           // File doesn't exist, will create new
         }
 
@@ -50,445 +52,330 @@ export const currentWorkspaceTools: ToolDefinition[] = [
         const analysis = await analyzeRecentActivity(includeDays);
         
         // Generate new content
-        const newContent = await generateCurrentWorkspace(analysis, existingContent, preserveSections);
+        const newContent = await generateCurrentContent(analysis, existingData, preserveSections, existingContent);
         
-        // Write the file
-        await fs.writeFile(currentPath, newContent);
+        // Write updated file
+        await fs.writeFile(currentPath, newContent, 'utf-8');
         
         return {
-          success: true,
-          message: 'Current workspace regenerated successfully',
-          stats: {
-            inProgress: analysis.inProgress.length,
-            recentlyCompleted: analysis.completed.length,
-            upcomingTasks: analysis.upcoming.length,
-            activeTags: analysis.topTags.length
-          },
-          path: currentPath
+          content: [{
+            type: 'text',
+            text: `✅ Regenerated current.md successfully\n\n` +
+                  `**Activity Summary:**\n` +
+                  `- 🚧 In Progress: ${analysis.inProgress.length}\n` +
+                  `- ✅ Recently Completed: ${analysis.recentlyCompleted.length}\n` +
+                  `- 📅 Upcoming Tasks: ${analysis.upcomingTasks.length}\n` +
+                  `- 🏷️ Active Tags: ${analysis.activeTags.size}\n\n` +
+                  `Path: ${currentPath}`
+          }]
         };
       } catch (error) {
         return {
-          error: `Failed to regenerate current.md: ${(error as Error).message}`,
-          success: false
+          content: [{
+            type: 'text',
+            text: `❌ Failed to regenerate current.md: ${error instanceof Error ? error.message : String(error)}`
+          }]
         };
       }
     }
   },
-
+  
   {
     name: 'devlog_update_current_section',
     title: 'Update Current Section',
     description: 'Update a specific section in current.md',
     inputSchema: {
-      type: 'object',
-      properties: {
-        section: {
-          type: 'string',
-          enum: ['focus', 'progress', 'achievements', 'priorities', 'inbox'],
-          description: 'Section to update'
-        },
-        content: {
-          type: 'string',
-          description: 'New content for the section'
-        },
-        append: {
-          type: 'boolean',
-          default: false,
-          description: 'Append to existing content instead of replacing'
-        }
-      },
-      required: ['section', 'content']
+      section: z.string().describe('Section name (e.g., "Current Focus", "Next Steps")'),
+      content: z.string().describe('New content for the section'),
+      append: z.boolean().optional().default(false).describe('Append to existing section instead of replacing')
     },
-    handler: async ({ section, content, append = false }: any) => {
+    handler: async ({ section, content, append = false }: UpdateSectionParams): Promise<CallToolResult> => {
       try {
         const currentPath = path.join(DEVLOG_PATH, 'current.md');
+        
+        // Read existing file
         const existingContent = await fs.readFile(currentPath, 'utf-8');
         
-        const sectionMap = {
-          focus: '## 🎯 Current Focus',
-          progress: '## 🚧 In Progress',
-          achievements: '## 💭 Recent Achievements',
-          priorities: '## ⏭️ Next Implementation Priorities',
-          inbox: '## 📥 Inbox'
-        };
+        // Update the section
+        const updatedContent = updateSection(existingContent, section, content, append);
         
-        const sectionHeader = sectionMap[section as keyof typeof sectionMap];
-        const updatedContent = updateSection(existingContent, sectionHeader, content, append);
-        
-        await fs.writeFile(currentPath, updatedContent);
+        // Write back
+        await fs.writeFile(currentPath, updatedContent, 'utf-8');
         
         return {
-          success: true,
-          message: `Updated ${section} section`,
-          section,
-          action: append ? 'appended' : 'replaced'
+          content: [{
+            type: 'text',
+            text: `✅ Updated section "${section}" in current.md\n` +
+                  `Action: ${append ? 'Appended to' : 'Replaced'} section`
+          }]
         };
       } catch (error) {
         return {
-          error: `Failed to update section: ${(error as Error).message}`,
-          success: false
+          content: [{
+            type: 'text',
+            text: `❌ Failed to update section: ${error instanceof Error ? error.message : String(error)}`
+          }]
         };
       }
     }
   },
-
+  
   {
-    name: 'devlog_analyze_current_status',
-    title: 'Analyze Current Status',
-    description: 'Analyze current project status from devlog entries',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        verbose: {
-          type: 'boolean',
-          default: false,
-          description: 'Include detailed analysis'
-        }
-      }
-    },
-    handler: async ({ verbose = false }: any) => {
+    name: 'devlog_get_current_focus',
+    title: 'Get Current Focus',
+    description: 'Get the current focus and active tasks from current.md',
+    inputSchema: {},
+    handler: async (): Promise<CallToolResult> => {
       try {
-        const analysis = await analyzeRecentActivity(30);
+        const currentPath = path.join(DEVLOG_PATH, 'current.md');
+        const content = await fs.readFile(currentPath, 'utf-8');
+        const parsed = matter(content);
         
-        // Calculate velocity metrics
-        const velocity = {
-          completedPerWeek: Math.round(analysis.completed.length / 4),
-          inProgressTime: calculateAverageInProgressTime(analysis.inProgress),
-          blockersCount: analysis.blockers.length,
-          momentum: calculateMomentum(analysis)
-        };
+        // Extract key sections
+        const focusMatch = content.match(/## 🎯 Current Focus\s*\n([\s\S]*?)(?=\n##|$)/);
+        const inProgressMatch = content.match(/## 🚧 In Progress\s*\n([\s\S]*?)(?=\n##|$)/);
+        const nextStepsMatch = content.match(/## 📅 Next Steps\s*\n([\s\S]*?)(?=\n##|$)/);
         
-        const summary = {
-          overview: {
-            totalActive: analysis.inProgress.length + analysis.upcoming.length,
-            completed30Days: analysis.completed.length,
-            blockedItems: analysis.blockers.length,
-            staleItems: analysis.stale.length
-          },
-          velocity,
-          topFocusAreas: analysis.topTags.slice(0, 5),
-          recommendations: generateRecommendations(analysis, velocity)
-        };
+        let summary = '# Current Workspace Status\n\n';
         
-        if (verbose) {
-          Object.assign(summary, {
-            inProgress: analysis.inProgress.map(formatEntry),
-            recentlyCompleted: analysis.completed.slice(0, 5).map(formatEntry),
-            blockers: analysis.blockers.map(formatEntry),
-            staleWork: analysis.stale.map(formatEntry)
-          });
+        if (parsed.data.lastUpdated) {
+          summary += `*Last Updated: ${parsed.data.lastUpdated}*\n\n`;
         }
         
-        return summary;
+        if (focusMatch) {
+          summary += `## 🎯 Current Focus\n${focusMatch[1].trim()}\n\n`;
+        }
+        
+        if (inProgressMatch) {
+          summary += `## 🚧 In Progress\n${inProgressMatch[1].trim()}\n\n`;
+        }
+        
+        if (nextStepsMatch) {
+          summary += `## 📅 Next Steps\n${nextStepsMatch[1].trim()}\n\n`;
+        }
+        
+        return {
+          content: [{
+            type: 'text',
+            text: summary
+          }]
+        };
       } catch (error) {
         return {
-          error: `Failed to analyze status: ${(error as Error).message}`
+          content: [{
+            type: 'text',
+            text: `❌ Failed to read current.md: ${error instanceof Error ? error.message : String(error)}`
+          }]
         };
       }
     }
   }
 ];
 
+interface ActivityAnalysis {
+  inProgress: Array<{task: string, file: string}>;
+  recentlyCompleted: Array<{task: string, date: Date}>;
+  upcomingTasks: Array<{task: string, priority?: string}>;
+  activeTags: Set<string>;
+  recentDecisions: Array<{decision: string, date: Date}>;
+  insights: string[];
+}
+
 // Helper functions
-async function analyzeRecentActivity(days: number) {
+async function analyzeRecentActivity(days: number): Promise<ActivityAnalysis> {
   const cutoffDate = new Date();
   cutoffDate.setDate(cutoffDate.getDate() - days);
   
-  const files = await glob('**/*.md', { cwd: DEVLOG_PATH });
-  const entries = [];
+  const analysis: ActivityAnalysis = {
+    inProgress: [],
+    recentlyCompleted: [],
+    upcomingTasks: [],
+    activeTags: new Set(),
+    recentDecisions: [],
+    insights: []
+  };
   
-  for (const file of files) {
-    if (file === 'current.md') continue;
+  // Analyze daily files
+  const dailyPattern = path.join(DEVLOG_PATH, 'daily', '**/*.md');
+  const dailyFiles = await glob(dailyPattern);
+  
+  for (const file of dailyFiles) {
+    const content = await fs.readFile(file, 'utf-8');
+    const parsed = matter(content);
     
-    try {
-      const filePath = path.join(DEVLOG_PATH, file);
-      const content = await fs.readFile(filePath, 'utf-8');
-      const parsed = matter(content);
-      const stats = await fs.stat(filePath);
+    // Extract date from filename or frontmatter
+    const fileDate = parsed.data.date ? new Date(parsed.data.date) : 
+                     new Date(path.basename(file).substring(0, 10));
+    
+    if (fileDate >= cutoffDate) {
+      // Extract in-progress tasks
+      const inProgressMatches = content.matchAll(/- \[ \] (.+)/g);
+      for (const match of inProgressMatches) {
+        analysis.inProgress.push({ task: match[1], file });
+      }
       
-      entries.push({
-        file,
-        path: filePath,
-        title: parsed.data.title || file,
-        tags: Array.isArray(parsed.data.tags) ? parsed.data.tags : [],
-        date: parsed.data.date || stats.mtime,
-        lastModified: stats.mtime,
-        content: parsed.content,
-        metadata: parsed.data
-      });
-    } catch (err) {
-      // Skip files with errors
+      // Extract completed tasks
+      const completedMatches = content.matchAll(/- \[x\] (.+)/g);
+      for (const match of completedMatches) {
+        analysis.recentlyCompleted.push({ task: match[1], date: fileDate });
+      }
+      
+      // Collect tags
+      if (parsed.data.tags) {
+        const tags = Array.isArray(parsed.data.tags) ? parsed.data.tags : [parsed.data.tags];
+        tags.forEach(tag => analysis.activeTags.add(tag));
+      }
     }
   }
   
-  // Categorize entries
-  const completed = entries.filter(e => 
-    e.tags.includes('status:completed') && new Date(e.lastModified) > cutoffDate
-  );
+  // Sort by recency
+  analysis.recentlyCompleted.sort((a, b) => b.date.getTime() - a.date.getTime());
   
-  const inProgress = entries.filter(e => 
-    e.tags.includes('status:in-progress') || 
-    e.tags.includes('status:active')
-  );
-  
-  const upcoming = entries.filter(e => 
-    e.tags.includes('status:planned') || 
-    e.tags.includes('status:todo')
-  );
-  
-  const blockers = entries.filter(e => 
-    e.tags.includes('status:blocked') || 
-    e.content.toLowerCase().includes('blocked')
-  );
-  
-  const stale = inProgress.filter(e => {
-    const daysSince = (Date.now() - new Date(e.lastModified).getTime()) / (1000 * 60 * 60 * 24);
-    return daysSince > 7;
-  });
-  
-  // Count tags
-  const tagCounts = new Map<string, number>();
-  entries.forEach(e => {
-    e.tags.forEach(tag => {
-      if (!tag.startsWith('status:')) {
-        tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1);
-      }
-    });
-  });
-  
-  const topTags = Array.from(tagCounts.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 10)
-    .map(([tag, count]) => ({ tag, count }));
-  
-  return {
-    completed,
-    inProgress,
-    upcoming,
-    blockers,
-    stale,
-    topTags,
-    totalEntries: entries.length
-  };
+  return analysis;
 }
 
-async function generateCurrentWorkspace(
-  analysis: any, 
-  existingContent: string, 
-  preserveSections: string[]
-) {
+async function generateCurrentContent(
+  analysis: ActivityAnalysis,
+  existingData: Record<string, unknown>,
+  preserveSections: string[],
+  existingContent: string
+): Promise<string> {
   const now = new Date();
-  const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}h${String(now.getMinutes()).padStart(2, '0')}`;
   
   // Generate frontmatter
-  const frontmatter = {
-    title: "Current Workspace",
-    date: timestamp,
-    agent_id: `agent-${timestamp.replace(/[-:]/g, '')}`,
-    last_active: timestamp,
-    tags: {
-      type: 'session',
-      scope: ['active-work'],
-      status: 'active'
+  let content = `---
+title: Current Workspace
+lastUpdated: ${now.toISOString()}
+autoGenerated: true
+activeTags: [${Array.from(analysis.activeTags).join(', ')}]
+`;
+  
+  // Preserve custom frontmatter fields
+  for (const [key, value] of Object.entries(existingData)) {
+    if (!['title', 'lastUpdated', 'autoGenerated', 'activeTags'].includes(key)) {
+      content += `${key}: ${JSON.stringify(value)}\n`;
     }
-  };
-  
-  let content = matter.stringify('', frontmatter);
-  content += '\n# Current Workspace\n\n';
-  
-  // Current Focus
-  content += '## 🎯 Current Focus\n';
-  if (shouldPreserveSection('focus', preserveSections, existingContent)) {
-    content += extractSection(existingContent, '## 🎯 Current Focus', '## 🚧') + '\n\n';
-  } else {
-    // Auto-generate from in-progress items
-    analysis.inProgress.slice(0, 3).forEach((item: any) => {
-      content += `- [ ] ${item.title}\n`;
-    });
-    content += '\n';
   }
   
-  // In Progress
-  content += '## 🚧 In Progress\n';
-  if (shouldPreserveSection('progress', preserveSections, existingContent)) {
-    content += extractSection(existingContent, '## 🚧 In Progress', '## 💭') + '\n\n';
+  content += `---
+
+# Current Workspace Status
+
+*Auto-generated on ${now.toLocaleString()}*
+
+## 🎯 Current Focus
+
+`;
+  
+  // Add current focus based on most recent in-progress tasks
+  if (analysis.inProgress.length > 0) {
+    const topTasks = analysis.inProgress.slice(0, 3);
+    topTasks.forEach(({ task }) => {
+      content += `- [ ] ${task}\n`;
+    });
   } else {
-    // Group by type
-    const byType = groupByType(analysis.inProgress);
-    Object.entries(byType).forEach(([type, items]: [string, any]) => {
-      if (items.length > 0) {
-        content += `- **${capitalizeFirst(type)}**: ${items[0].title}`;
-        if (items.length > 1) {
-          content += ` (+${items.length - 1} more)`;
-        }
-        content += '\n';
+    content += `*No active tasks found in recent logs*\n`;
+  }
+  
+  content += `
+## 🚧 In Progress
+
+`;
+  
+  // List all in-progress tasks
+  if (analysis.inProgress.length > 0) {
+    analysis.inProgress.forEach(({ task, file }) => {
+      const relPath = path.relative(DEVLOG_PATH, file);
+      content += `- [ ] ${task} *(${relPath})*\n`;
+    });
+  } else {
+    content += `*No tasks currently in progress*\n`;
+  }
+  
+  content += `
+## ✅ Recently Completed
+
+`;
+  
+  // Show recently completed tasks
+  if (analysis.recentlyCompleted.length > 0) {
+    const recent = analysis.recentlyCompleted.slice(0, 10);
+    recent.forEach(({ task, date }) => {
+      const daysAgo = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+      const timeStr = daysAgo === 0 ? 'today' : 
+                      daysAgo === 1 ? 'yesterday' : 
+                      `${daysAgo} days ago`;
+      content += `- [x] ${task} *(${timeStr})*\n`;
+    });
+  } else {
+    content += `*No recently completed tasks*\n`;
+  }
+  
+  content += `
+## 📅 Next Steps
+
+`;
+  
+  // Preserve Next Steps section if requested
+  if (preserveSections.includes('Next Steps') && existingContent) {
+    const nextStepsMatch = existingContent.match(/## 📅 Next Steps\s*\n([\s\S]*?)(?=\n##|$)/);
+    if (nextStepsMatch) {
+      content += nextStepsMatch[1].trim() + '\n';
+    } else {
+      content += `*Add your planned next steps here*\n`;
+    }
+  } else {
+    content += `*Add your planned next steps here*\n`;
+  }
+  
+  // Add custom preserved sections
+  for (const section of preserveSections) {
+    if (section !== 'Next Steps' && existingContent) {
+      const sectionRegex = new RegExp(`## [^\\n]*${section}[^\\n]*\\n([\\s\\S]*?)(?=\\n##|$)`, 'i');
+      const sectionMatch = existingContent.match(sectionRegex);
+      if (sectionMatch) {
+        content += `\n## ${section}\n\n${sectionMatch[1].trim()}\n`;
       }
-    });
-    content += '\n';
-  }
-  
-  // Recent Achievements
-  content += '## 💭 Recent Achievements\n';
-  analysis.completed.slice(0, 5).forEach((item: any) => {
-    const date = new Date(item.lastModified).toISOString().split('T')[0];
-    content += `- ✅ ${item.title} (${date})\n`;
-  });
-  content += '\n';
-  
-  // Next Priorities
-  content += '## ⏭️ Next Implementation Priorities\n';
-  if (shouldPreserveSection('priorities', preserveSections, existingContent)) {
-    content += extractSection(existingContent, '## ⏭️', '## 📥') + '\n\n';
-  } else {
-    // Auto-generate from upcoming
-    analysis.upcoming.slice(0, 5).forEach((item: any) => {
-      content += `- [ ] ${item.title}\n`;
-    });
-    content += '\n';
-  }
-  
-  // Inbox
-  content += '## 📥 Inbox\n';
-  if (shouldPreserveSection('inbox', preserveSections, existingContent)) {
-    content += extractSection(existingContent, '## 📥 Inbox', '---') + '\n\n';
-  } else {
-    // Add stale items and blockers
-    if (analysis.stale.length > 0) {
-      content += `- ${analysis.stale.length} items need attention (>7 days old)\n`;
     }
-    if (analysis.blockers.length > 0) {
-      content += `- ${analysis.blockers.length} blocked items need resolution\n`;
-    }
-    content += '\n';
   }
   
-  // Stats section
-  content += '## 📊 Activity Stats\n';
-  content += `- **Completed (7d)**: ${analysis.completed.filter((e: any) => {
-    const days = (Date.now() - new Date(e.lastModified).getTime()) / (1000 * 60 * 60 * 24);
-    return days <= 7;
-  }).length}\n`;
-  content += `- **In Progress**: ${analysis.inProgress.length}\n`;
-  content += `- **Upcoming**: ${analysis.upcoming.length}\n`;
-  content += `- **Top Focus**: ${analysis.topTags.slice(0, 3).map((t: any) => t.tag).join(', ')}\n\n`;
-  
-  content += '---\n';
-  content += `*Last Update: ${timestamp} (auto-generated)*\n`;
+  content += `
+## 📊 Activity Summary
+
+- **Active Tags**: ${Array.from(analysis.activeTags).join(', ') || 'None'}
+- **In Progress**: ${analysis.inProgress.length} tasks
+- **Recently Completed**: ${analysis.recentlyCompleted.length} tasks (last ${analysis.recentlyCompleted.length > 0 ? Math.floor((now.getTime() - analysis.recentlyCompleted[analysis.recentlyCompleted.length - 1].date.getTime()) / (1000 * 60 * 60 * 24)) : 0} days)
+
+---
+*This file is auto-generated. To preserve custom sections, use the \`preserveSections\` parameter when regenerating.*
+`;
   
   return content;
 }
 
-function updateSection(content: string, sectionHeader: string, newContent: string, append: boolean) {
-  const sectionRegex = new RegExp(`(${sectionHeader}[\\s\\S]*?)(?=##|---)`, 'g');
-  const match = content.match(sectionRegex);
+function updateSection(content: string, sectionName: string, newContent: string, append: boolean): string {
+  // Normalize section name
+  const normalizedSection = sectionName.replace(/^#+\s*/, '').trim();
+  
+  // Try to find the section with various heading levels
+  let sectionRegex = new RegExp(`(## [^\\n]*${normalizedSection}[^\\n]*\\n)([\\s\\S]*?)(?=\\n##|$)`, 'i');
+  let match = content.match(sectionRegex);
+  
+  if (!match) {
+    // Try with single #
+    sectionRegex = new RegExp(`(# [^\\n]*${normalizedSection}[^\\n]*\\n)([\\s\\S]*?)(?=\\n#|$)`, 'i');
+    match = content.match(sectionRegex);
+  }
   
   if (match) {
-    if (append) {
-      const updated = match[0].trimEnd() + '\n' + newContent + '\n\n';
-      return content.replace(match[0], updated);
-    } else {
-      const updated = `${sectionHeader}\n${newContent}\n\n`;
-      return content.replace(match[0], updated);
-    }
-  } else {
-    // Section doesn't exist, add it
-    const insertPoint = content.lastIndexOf('---');
-    if (insertPoint > -1) {
-      return content.slice(0, insertPoint) + 
-             `${sectionHeader}\n${newContent}\n\n` + 
-             content.slice(insertPoint);
-    }
-    return content + `\n${sectionHeader}\n${newContent}\n\n`;
-  }
-}
-
-function shouldPreserveSection(section: string, preserveList: string[], existingContent: string): boolean {
-  return preserveList.includes(section) && existingContent.includes('##');
-}
-
-function extractSection(content: string, startPattern: string, endPattern: string): string {
-  const startIndex = content.indexOf(startPattern);
-  if (startIndex === -1) return '';
-  
-  const fromStart = content.substring(startIndex + startPattern.length);
-  const endMatch = fromStart.match(new RegExp(endPattern));
-  
-  if (endMatch && endMatch.index !== undefined) {
-    return fromStart.substring(0, endMatch.index).trim();
-  }
-  
-  return fromStart.trim();
-}
-
-function groupByType(entries: any[]): Record<string, any[]> {
-  const groups: Record<string, any[]> = {};
-  
-  entries.forEach(entry => {
-    const typeTag = entry.tags.find((t: string) => t.startsWith('type:'));
-    const type = typeTag ? typeTag.split(':')[1] : 'other';
+    const [fullMatch, heading, existingContent] = match;
+    const updatedSectionContent = append ? 
+      existingContent.trim() + '\n' + newContent : 
+      newContent;
     
-    if (!groups[type]) groups[type] = [];
-    groups[type].push(entry);
-  });
-  
-  return groups;
-}
-
-function capitalizeFirst(str: string): string {
-  return str.charAt(0).toUpperCase() + str.slice(1);
-}
-
-function calculateAverageInProgressTime(entries: any[]): number {
-  if (entries.length === 0) return 0;
-  
-  const times = entries.map(e => {
-    const created = new Date(e.date);
-    const now = new Date();
-    return (now.getTime() - created.getTime()) / (1000 * 60 * 60 * 24);
-  });
-  
-  return Math.round(times.reduce((a, b) => a + b, 0) / times.length);
-}
-
-function calculateMomentum(analysis: any): string {
-  const recentCompleted = analysis.completed.filter((e: any) => {
-    const days = (Date.now() - new Date(e.lastModified).getTime()) / (1000 * 60 * 60 * 24);
-    return days <= 7;
-  }).length;
-  
-  if (recentCompleted > 5) return 'high';
-  if (recentCompleted > 2) return 'medium';
-  return 'low';
-}
-
-function generateRecommendations(analysis: any, velocity: any): string[] {
-  const recommendations = [];
-  
-  if (analysis.blockers.length > 0) {
-    recommendations.push(`Resolve ${analysis.blockers.length} blocked items to improve flow`);
+    return content.replace(fullMatch, `${heading}${updatedSectionContent}\n`);
+  } else {
+    // Section doesn't exist, append it
+    return content.trim() + `\n\n## ${normalizedSection}\n\n${newContent}\n`;
   }
-  
-  if (analysis.stale.length > 3) {
-    recommendations.push(`Review ${analysis.stale.length} stale items - archive or update`);
-  }
-  
-  if (velocity.momentum === 'low') {
-    recommendations.push('Momentum is low - consider breaking down large tasks');
-  }
-  
-  if (analysis.inProgress.length > 10) {
-    recommendations.push('Too many items in progress - consider focusing on fewer tasks');
-  }
-  
-  return recommendations;
-}
-
-function formatEntry(entry: any): any {
-  return {
-    title: entry.title,
-    file: entry.file,
-    tags: entry.tags,
-    lastModified: entry.lastModified,
-    daysSince: Math.round((Date.now() - new Date(entry.lastModified).getTime()) / (1000 * 60 * 60 * 24))
-  };
 }

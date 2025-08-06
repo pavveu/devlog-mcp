@@ -16,7 +16,7 @@ interface SessionData {
   file: string;
   date: Date;
   content: string;
-  frontmatter: any;
+  frontmatter: Record<string, unknown>;
   summary?: string;
   completedTasks: string[];
   inProgressTasks: string[];
@@ -238,17 +238,17 @@ async function generateWeeklySummary(
   // Extract unique focus areas from tags
   const focusAreas = new Set<string>();
   sessions.forEach(s => {
-    if (s.frontmatter.tags?.scope) {
-      const scopes = Array.isArray(s.frontmatter.tags.scope) 
-        ? s.frontmatter.tags.scope 
-        : [s.frontmatter.tags.scope];
+    const tags = s.frontmatter.tags as { scope?: string | string[]; [key: string]: unknown } | undefined;
+    if (tags?.scope) {
+      const scopes = Array.isArray(tags.scope) 
+        ? tags.scope 
+        : [tags.scope];
       scopes.forEach((scope: string) => focusAreas.add(scope));
     }
   });
   
   // Calculate productivity metrics
   const totalHours = sessions.length * 2.5; // Rough estimate
-  const productivity = allCompleted.length / sessions.length;
   
   const summary = `---
 title: "Week ${weekNumber} Consolidated - ${year}"

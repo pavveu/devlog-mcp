@@ -79,7 +79,7 @@ async function runTests() {
   console.log(`\nFound ${clusters.size} topic clusters:\n`);
   
   let clusterNum = 1;
-  for (const [clusterId, files] of clusters) {
+  for (const [, files] of clusters) {
     if (clusterNum > 5) break;  // Show first 5 clusters
     
     console.log(`Cluster ${clusterNum}: ${files.length} files`);

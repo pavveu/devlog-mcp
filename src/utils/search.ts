@@ -22,7 +22,7 @@ export async function readDevlogFile(filePath: string): Promise<string | null> {
 export async function searchDevlogs(
   query: string, 
   type: string = 'all', 
-  tagFilters?: Record<string, any>
+  tagFilters?: Record<string, unknown>
 ): Promise<SearchResult[]> {
   const patterns: Record<string, string> = {
     posts: 'posts/**/*.md',

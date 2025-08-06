@@ -7,27 +7,27 @@ import { CallToolResult } from '../types.js';
 import { DEVLOG_PATH } from '../types/devlog.js';
 
 // Helper function for analyzing codebase (duplicate for now, will be refactored)
-async function analyzeCodebaseForFeature(feature: string) {
-  const results = await searchDevlogs(feature);
-  
-  return {
-    checklist: [
-      'Research existing patterns and conventions',
-      'Create feature branch from main',
-      'Implement core functionality',
-      'Add comprehensive tests',
-      'Update documentation'
-    ],
-    conflicts: [],
-    components: results.slice(0, 3).map(r => r.file),
-    testScenarios: [
-      'Unit tests for core logic',
-      'Integration tests',
-      'Edge case handling',
-      'Error scenarios'
-    ]
-  };
-}
+// async function analyzeCodebaseForFeature(feature: string) {
+//   const results = await searchDevlogs(feature);
+//   
+//   return {
+//     checklist: [
+//       'Research existing patterns and conventions',
+//       'Create feature branch from main',
+//       'Implement core functionality',
+//       'Add comprehensive tests',
+//       'Update documentation'
+//     ],
+//     conflicts: [],
+//     components: results.slice(0, 3).map(r => r.file),
+//     testScenarios: [
+//       'Unit tests for core logic',
+//       'Integration tests',
+//       'Edge case handling',
+//       'Error scenarios'
+//     ]
+//   };
+// }
 
 export const planningTools: ToolDefinition[] = [
   {

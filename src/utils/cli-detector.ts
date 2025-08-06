@@ -74,16 +74,29 @@ export function detectCLI(): CLIContext {
   };
 }
 
-export function adaptForCLI(cli: CLIContext, response: any): any {
+export function adaptForCLI(cli: CLIContext, response: unknown): unknown {
   // Adapt responses based on CLI capabilities
-  if (!cli.features.supportsStreaming && response.stream) {
+  if (!cli.features.supportsStreaming && 
+      response && 
+      typeof response === 'object' && 
+      'stream' in response && 
+      response.stream) {
     // Convert streaming response to batch
     return { ...response, stream: false };
   }
   
   // Add CLI-specific metadata
-  if (cli.name === 'claude') {
-    response.metadata = { ...response.metadata, formatted: true };
+  if (cli.name === 'claude' && 
+      response && 
+      typeof response === 'object') {
+    const typedResponse = response as { metadata?: Record<string, unknown> };
+    return { 
+      ...response, 
+      metadata: { 
+        ...typedResponse.metadata, 
+        formatted: true 
+      } 
+    };
   }
   
   return response;

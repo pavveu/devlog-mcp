@@ -21,18 +21,9 @@ interface BackupItem {
   updated_date: string;
   file_path: string;
   content: string;
-  metadata: { [key: string]: any };
+  metadata: { [key: string]: unknown };
 }
 
-interface BackupSummary {
-  total_items: number;
-  issues: number;
-  features: number;
-  last_backup: string;
-  chromadb_synced: boolean;
-  missing_files: string[];
-  orphaned_files: string[];
-}
 
 // Get all tracking files
 async function getAllTrackingFiles(): Promise<string[]> {
@@ -60,7 +51,7 @@ async function getAllTrackingFiles(): Promise<string[]> {
         }
       }
     }
-  } catch (error) {
+  } catch {
     // Directory might not exist yet
   }
   
@@ -75,7 +66,7 @@ async function parseTrackingFile(filePath: string): Promise<BackupItem | null> {
     
     // Extract YAML frontmatter
     let inFrontmatter = false;
-    const metadata: { [key: string]: any } = {};
+    const metadata: { [key: string]: unknown } = {};
     
     for (const line of lines) {
       if (line === '---') {
@@ -117,18 +108,18 @@ async function parseTrackingFile(filePath: string): Promise<BackupItem | null> {
     }
     
     return {
-      id: metadata.issue_id || metadata.feature_id || path.basename(filePath, '.md'),
+      id: (metadata.issue_id as string) || (metadata.feature_id as string) || path.basename(filePath, '.md'),
       type,
-      title: metadata.title || 'Unknown',
-      status: metadata.status || 'unknown',
-      priority: metadata.priority || 'medium',
-      created_date: metadata.created_date || new Date().toISOString(),
-      updated_date: metadata.updated_date || new Date().toISOString(),
+      title: (metadata.title as string) || 'Unknown',
+      status: (metadata.status as string) || 'unknown',
+      priority: (metadata.priority as string) || 'medium',
+      created_date: (metadata.created_date as string) || new Date().toISOString(),
+      updated_date: (metadata.updated_date as string) || new Date().toISOString(),
       file_path: filePath,
       content,
       metadata
     };
-  } catch (error) {
+  } catch {
     return null;
   }
 }
@@ -167,7 +158,7 @@ async function getLatestBackup(): Promise<string | null> {
     
     backupFiles.sort().reverse(); // Most recent first
     return path.join(backupDir, backupFiles[0]);
-  } catch (error) {
+  } catch {
     return null;
   }
 }
@@ -188,7 +179,7 @@ async function checkChromaDBSync(items: BackupItem[]): Promise<{ synced: boolean
       if (ageHours < 1) {
         missing.push(item.id);
       }
-    } catch (error) {
+    } catch {
       missing.push(item.id);
     }
   }
@@ -208,7 +199,8 @@ export const backupRecoveryTools: ToolDefinition[] = [
       create_backup: z.boolean().default(false).describe('Create new backup file'),
       check_chromadb: z.boolean().default(true).describe('Check ChromaDB sync status'),
     },
-    handler: async ({ create_backup, check_chromadb }): Promise<CallToolResult> => {
+    handler: async (args: { create_backup?: boolean; check_chromadb?: boolean }): Promise<CallToolResult> => {
+      const { create_backup, check_chromadb } = args;
       try {
         // Get all tracking files
         const files = await getAllTrackingFiles();
@@ -242,7 +234,7 @@ export const backupRecoveryTools: ToolDefinition[] = [
             if (ageHours < 24) {
               recentFiles.push(item.id);
             }
-          } catch (error) {
+          } catch {
             missingFiles.push(item.file_path);
           }
         }
@@ -335,7 +327,8 @@ export const backupRecoveryTools: ToolDefinition[] = [
       source: z.enum(['backup', 'chromadb', 'auto']).default('auto').describe('Restore source'),
       dry_run: z.boolean().default(true).describe('Preview restoration without making changes'),
     },
-    handler: async ({ type, source, dry_run }): Promise<CallToolResult> => {
+    handler: async (args: { type?: 'all' | 'issues' | 'features'; source?: 'backup' | 'chromadb' | 'auto'; dry_run?: boolean }): Promise<CallToolResult> => {
+      const { type, source, dry_run } = args;
       try {
         let output = `🔄 **Data Restoration${dry_run ? ' Preview' : ''}**\n\n`;
         
@@ -396,7 +389,7 @@ export const backupRecoveryTools: ToolDefinition[] = [
               if (stat.mtime < backupDate) {
                 itemsNeedingRestore.push(item);
               }
-            } catch (error) {
+            } catch {
               // File doesn't exist, needs restoration
               itemsNeedingRestore.push(item);
             }
@@ -509,7 +502,8 @@ export const backupRecoveryTools: ToolDefinition[] = [
     inputSchema: {
       fix_issues: z.boolean().default(false).describe('Automatically fix detected issues'),
     },
-    handler: async ({ fix_issues }): Promise<CallToolResult> => {
+    handler: async (args: { fix_issues?: boolean }): Promise<CallToolResult> => {
+      const { fix_issues } = args;
       try {
         let output = `🏥 **System Health Check**\n\n`;
         
@@ -533,7 +527,7 @@ export const backupRecoveryTools: ToolDefinition[] = [
           const fullPath = path.join(DEVLOG_PATH, '..', dir);
           try {
             await fs.access(fullPath);
-          } catch (error) {
+          } catch {
             missingDirs.push(dir);
           }
         }
@@ -625,7 +619,7 @@ export const backupRecoveryTools: ToolDefinition[] = [
             }
             output += `\n`;
           }
-        } catch (error) {
+        } catch {
           output += `📊 **Weekly Integration**: ❌ currentWeek.md not found\n\n`;
         }
         

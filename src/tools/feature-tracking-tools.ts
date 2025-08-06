@@ -12,7 +12,7 @@ import { getCurrentWorkspace } from '../utils/workspace.js';
 import { DEVLOG_PATH } from '../types/devlog.js';
 
 // Feature status enum
-const FeatureStatus = z.enum(['ideas', 'planned', 'active', 'completed', 'archived']);
+// const _FeatureStatus = z.enum(['ideas', 'planned', 'active', 'completed', 'archived']);
 const FeatureComplexity = z.enum(['trivial', 'simple', 'moderate', 'complex', 'epic']);
 const FeaturePriority = z.enum(['low', 'medium', 'high', 'critical']);
 
@@ -100,7 +100,6 @@ async function parseFeatureFile(filePath: string): Promise<Feature | null> {
     
     // Extract YAML frontmatter
     let inFrontmatter = false;
-    let frontmatterEnd = 0;
     const yamlLines: string[] = [];
     
     for (let i = 0; i < lines.length; i++) {
@@ -109,7 +108,7 @@ async function parseFeatureFile(filePath: string): Promise<Feature | null> {
           inFrontmatter = true;
           continue;
         } else {
-          frontmatterEnd = i;
+          // frontmatterEnd = i;
           break;
         }
       }
@@ -170,7 +169,7 @@ async function parseFeatureFile(filePath: string): Promise<Feature | null> {
     }
     
     return feature as Feature;
-  } catch (error) {
+  } catch {
     return null;
   }
 }
@@ -193,7 +192,7 @@ async function listFeaturesInDirectory(dir: string): Promise<Feature[]> {
     }
     
     return features.sort((a, b) => new Date(b.created_date).getTime() - new Date(a.created_date).getTime());
-  } catch (error) {
+  } catch {
     return [];
   }
 }
@@ -242,7 +241,7 @@ export const featureTrackingTools: ToolDefinition[] = [
             if (sessionMatch) {
               feature.session_id = sessionMatch[1];
             }
-          } catch (e) {
+          } catch {
             // Ignore if can't extract session ID
           }
         }
@@ -411,7 +410,7 @@ export const featureTrackingTools: ToolDefinition[] = [
             featureFile = filePath;
             currentStatus = dir;
             break;
-          } catch (e) {
+          } catch {
             // File doesn't exist in this directory, continue
           }
         }
@@ -505,7 +504,7 @@ export const featureTrackingTools: ToolDefinition[] = [
             featureFile = filePath;
             currentStatus = dir;
             break;
-          } catch (e) {
+          } catch {
             // File doesn't exist in this directory, continue
           }
         }

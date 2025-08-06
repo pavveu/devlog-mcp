@@ -197,7 +197,20 @@ export function createMockMermaidClient(): MermaidMCPClient {
  * Extract visual data from compression analysis
  */
 export function extractVisualDataFromCompressionResult(
-  compressionResult: any,
+  compressionResult: {
+    completedTasks?: string[];
+    decisions?: string[];
+    timeline?: { task: string; completed: boolean }[];
+    activeHours?: {
+      totalHours?: number;
+      dailyHours?: Record<string, number>;
+      peakHour?: number;
+      averageSessionLength?: number;
+      workPattern?: 'early-bird' | 'normal' | 'night-owl' | 'mixed';
+      activeTimeSlots?: number;
+    };
+    velocity?: { tasksPerWeek?: number };
+  },
   weekNumber: number,
   year: number
 ): CompressionVisualData {

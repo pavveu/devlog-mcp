@@ -278,8 +278,8 @@ export const workspaceTools: ToolDefinition[] = [
       }
       
       const { agentId } = parseAgentFromContent(workspace.content);
-      const sessionIdMatch = workspace.content.match(/session_id:\s*"([^"]+)"/);
-      const sessionId = sessionIdMatch ? sessionIdMatch[1] : 'unknown';
+      // const sessionIdMatch = workspace.content.match(/session_id:\s*"([^"]+)"/);
+      // const _sessionId = sessionIdMatch ? sessionIdMatch[1] : 'unknown';
       
       // Flush any pending tool tracking
       await flushToolTracking();

@@ -3,11 +3,11 @@
  * Provides tools for finding similar content and preventing duplicates
  */
 
+import { z } from 'zod';
 import { ToolDefinition } from './registry.js';
 import { similarityDetector } from './similarity-detector.js';
-import * as fs from 'fs/promises';
+import { CallToolResult } from '../types.js';
 import * as path from 'path';
-import matter from 'gray-matter';
 
 export const similarityTools: ToolDefinition[] = [
   {
@@ -15,31 +15,13 @@ export const similarityTools: ToolDefinition[] = [
     title: 'Find Similar Content',
     description: 'Find devlog entries similar to provided content',
     inputSchema: {
-      type: 'object',
-      properties: {
-        content: {
-          type: 'string',
-          description: 'Content to find similar entries for'
-        },
-        threshold: {
-          type: 'number',
-          default: 0.3,
-          description: 'Similarity threshold (0-1)'
-        },
-        maxResults: {
-          type: 'number',
-          default: 10,
-          description: 'Maximum results to return'
-        },
-        boostRecent: {
-          type: 'boolean',
-          default: true,
-          description: 'Boost recent files in results'
-        }
-      },
-      required: ['content']
+      content: z.string().describe('Content to find similar entries for'),
+      threshold: z.number().default(0.3).describe('Similarity threshold (0-1)'),
+      maxResults: z.number().default(10).describe('Maximum results to return'),
+      boostRecent: z.boolean().default(true).describe('Boost recent files in results')
     },
-    handler: async ({ content, threshold = 0.3, maxResults = 10, boostRecent = true }: any) => {
+    handler: async (args: { content: string; threshold?: number; maxResults?: number; boostRecent?: boolean }): Promise<CallToolResult> => {
+      const { content, threshold = 0.3, maxResults = 10, boostRecent = true } = args;
       try {
         const results = await similarityDetector.findSimilar(content, {
           threshold,
@@ -49,27 +31,37 @@ export const similarityTools: ToolDefinition[] = [
 
         if (results.length === 0) {
           return {
-            message: 'No similar content found',
-            results: []
+            content: [{
+              type: 'text',
+              text: 'No similar content found'
+            }]
           };
         }
 
         return {
-          summary: `Found ${results.length} similar entries`,
-          results: results.map(r => ({
-            file: r.file,
-            similarity: `${(r.score * 100).toFixed(1)}%`,
-            title: r.metadata.title || r.file,
-            tags: r.metadata.tags || [],
-            wordCount: r.metadata.wordCount,
-            excerpt: r.excerpt
-          })),
-          recommendations: generateRecommendations(results)
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              summary: `Found ${results.length} similar entries`,
+              results: results.map(r => ({
+                file: r.file,
+                similarity: `${(r.score * 100).toFixed(1)}%`,
+                title: r.metadata.title || r.file,
+                tags: r.metadata.tags || [],
+                wordCount: r.metadata.wordCount,
+                excerpt: r.excerpt
+              })),
+              recommendations: generateRecommendations(results)
+            }, null, 2)
+          }]
         };
       } catch (error) {
         return {
-          error: `Failed to find similar content: ${(error as Error).message}`,
-          results: []
+          content: [{
+            type: 'text',
+            text: `Failed to find similar content: ${(error as Error).message}`
+          }],
+          isError: true
         };
       }
     }
@@ -80,25 +72,12 @@ export const similarityTools: ToolDefinition[] = [
     title: 'Check Before Writing',
     description: 'Check if similar content already exists before creating new entry',
     inputSchema: {
-      type: 'object',
-      properties: {
-        title: {
-          type: 'string',
-          description: 'Proposed title'
-        },
-        content: {
-          type: 'string',
-          description: 'Proposed content'
-        },
-        tags: {
-          type: 'array',
-          items: { type: 'string' },
-          description: 'Proposed tags'
-        }
-      },
-      required: ['content']
+      title: z.string().optional().describe('Proposed title'),
+      content: z.string().describe('Proposed content'),
+      tags: z.array(z.string()).optional().describe('Proposed tags')
     },
-    handler: async ({ title, content, tags = [] }: any) => {
+    handler: async (args: { title?: string; content: string; tags?: string[] }): Promise<CallToolResult> => {
+      const { title, content, tags = [] } = args;
       try {
         // Combine title and content for better matching
         const fullContent = title ? `${title}\n\n${content}` : content;
@@ -127,23 +106,31 @@ export const similarityTools: ToolDefinition[] = [
         }
 
         return {
-          shouldProceed,
-          recommendation,
-          similarEntries: results.map(r => ({
-            file: r.file,
-            similarity: `${(r.score * 100).toFixed(1)}%`,
-            title: r.metadata.title || r.file,
-            suggestion: r.score > 0.7 ? 'Consider updating this instead' : 
-                       r.score > 0.5 ? 'Maybe reference or link to this' : 
-                       'Related but different enough'
-          })),
-          proposedTags: tags,
-          suggestedAction: getSuggestedAction(results)
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              shouldProceed,
+              recommendation,
+              similarEntries: results.map(r => ({
+                file: r.file,
+                similarity: `${(r.score * 100).toFixed(1)}%`,
+                title: r.metadata.title || r.file,
+                suggestion: r.score > 0.7 ? 'Consider updating this instead' : 
+                           r.score > 0.5 ? 'Maybe reference or link to this' : 
+                           'Related but different enough'
+              })),
+              proposedTags: tags,
+              suggestedAction: getSuggestedAction(results)
+            }, null, 2)
+          }]
         };
       } catch (error) {
         return {
-          error: `Failed to check content: ${(error as Error).message}`,
-          shouldProceed: true
+          content: [{
+            type: 'text',
+            text: `Failed to check content: ${(error as Error).message}`
+          }],
+          isError: true
         };
       }
     }
@@ -154,21 +141,11 @@ export const similarityTools: ToolDefinition[] = [
     title: 'Find Related Entries',
     description: 'Find entries related to a specific file',
     inputSchema: {
-      type: 'object',
-      properties: {
-        file: {
-          type: 'string',
-          description: 'File path to find related entries for'
-        },
-        maxResults: {
-          type: 'number',
-          default: 10,
-          description: 'Maximum results'
-        }
-      },
-      required: ['file']
+      file: z.string().describe('File path to find related entries for'),
+      maxResults: z.number().default(10).describe('Maximum results')
     },
-    handler: async ({ file, maxResults = 10 }: any) => {
+    handler: async (args: { file: string; maxResults?: number }): Promise<CallToolResult> => {
+      const { file, maxResults = 10 } = args;
       try {
         const results = await similarityDetector.findSimilarToFile(file, {
           maxResults,
@@ -177,8 +154,13 @@ export const similarityTools: ToolDefinition[] = [
 
         if (results.length === 0) {
           return {
-            message: `No related entries found for ${file}`,
-            results: []
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                message: `No related entries found for ${file}`,
+                results: []
+              }, null, 2)
+            }]
           };
         }
 
@@ -188,16 +170,24 @@ export const similarityTools: ToolDefinition[] = [
         const looselyRelated = results.filter(r => r.score <= 0.4);
 
         return {
-          summary: `Found ${results.length} related entries for ${file}`,
-          closelyRelated: formatResults(closelyRelated, 'Closely Related'),
-          moderatelyRelated: formatResults(moderatelyRelated, 'Moderately Related'),
-          looselyRelated: formatResults(looselyRelated, 'Loosely Related'),
-          graph: generateRelationshipGraph(file, results)
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              summary: `Found ${results.length} related entries for ${file}`,
+              closelyRelated: formatResults(closelyRelated, 'Closely Related'),
+              moderatelyRelated: formatResults(moderatelyRelated, 'Moderately Related'),
+              looselyRelated: formatResults(looselyRelated, 'Loosely Related'),
+              graph: generateRelationshipGraph(file, results)
+            }, null, 2)
+          }]
         };
       } catch (error) {
         return {
-          error: `Failed to find related entries: ${(error as Error).message}`,
-          results: []
+          content: [{
+            type: 'text',
+            text: `Failed to find related entries: ${(error as Error).message}`
+          }],
+          isError: true
         };
       }
     }
@@ -208,21 +198,11 @@ export const similarityTools: ToolDefinition[] = [
     title: 'Cluster Topics',
     description: 'Group similar devlog entries into topic clusters',
     inputSchema: {
-      type: 'object',
-      properties: {
-        threshold: {
-          type: 'number',
-          default: 0.5,
-          description: 'Clustering threshold (0-1)'
-        },
-        directory: {
-          type: 'string',
-          default: 'devlog',
-          description: 'Directory to analyze'
-        }
-      }
+      threshold: z.number().default(0.5).describe('Clustering threshold (0-1)'),
+      directory: z.string().default('devlog').describe('Directory to analyze')
     },
-    handler: async ({ threshold = 0.5, directory = 'devlog' }: any) => {
+    handler: async (args: { threshold?: number; directory?: string }): Promise<CallToolResult> => {
+      const { threshold = 0.5, directory = 'devlog' } = args;
       try {
         // Build index first
         await similarityDetector.buildIndex([`${directory}/**/*.md`]);
@@ -232,8 +212,13 @@ export const similarityTools: ToolDefinition[] = [
         
         if (clusters.size === 0) {
           return {
-            message: 'No clusters found at this threshold',
-            clusters: []
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                message: 'No clusters found at this threshold',
+                clusters: []
+              }, null, 2)
+            }]
           };
         }
 
@@ -252,15 +237,23 @@ export const similarityTools: ToolDefinition[] = [
         }
 
         return {
-          summary: `Found ${clusters.size} topic clusters`,
-          totalFiles: Array.from(clusters.values()).reduce((sum, files) => sum + files.length, 0),
-          clusters: clusterAnalysis.sort((a, b) => b.size - a.size),
-          insights: generateClusteringInsights(clusterAnalysis)
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              summary: `Found ${clusters.size} topic clusters`,
+              totalFiles: Array.from(clusters.values()).reduce((sum, files) => sum + files.length, 0),
+              clusters: clusterAnalysis.sort((a, b) => b.size - a.size),
+              insights: generateClusteringInsights(clusterAnalysis)
+            }, null, 2)
+          }]
         };
       } catch (error) {
         return {
-          error: `Failed to cluster topics: ${(error as Error).message}`,
-          clusters: []
+          content: [{
+            type: 'text',
+            text: `Failed to cluster topics: ${(error as Error).message}`
+          }],
+          isError: true
         };
       }
     }
@@ -271,22 +264,11 @@ export const similarityTools: ToolDefinition[] = [
     title: 'Build Similarity Index', 
     description: 'Build or rebuild the similarity index for better performance',
     inputSchema: {
-      type: 'object',
-      properties: {
-        patterns: {
-          type: 'array',
-          items: { type: 'string' },
-          default: ['devlog/**/*.md'],
-          description: 'File patterns to index'
-        },
-        force: {
-          type: 'boolean',
-          default: false,
-          description: 'Force rebuild even if index exists'
-        }
-      }
+      patterns: z.array(z.string()).default(['devlog/**/*.md']).describe('File patterns to index'),
+      force: z.boolean().default(false).describe('Force rebuild even if index exists')
     },
-    handler: async ({ patterns = ['devlog/**/*.md'], force = false }: any) => {
+    handler: async (args: { patterns?: string[]; force?: boolean }): Promise<CallToolResult> => {
+      const { patterns = ['devlog/**/*.md'] } = args;
       try {
         const startTime = Date.now();
         
@@ -295,18 +277,26 @@ export const similarityTools: ToolDefinition[] = [
         const duration = Date.now() - startTime;
         
         return {
-          success: true,
-          message: 'Similarity index built successfully',
-          stats: {
-            duration: `${duration}ms`,
-            patterns: patterns,
-            timestamp: new Date().toISOString()
-          }
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              success: true,
+              message: 'Similarity index built successfully',
+              stats: {
+                duration: `${duration}ms`,
+                patterns: patterns,
+                timestamp: new Date().toISOString()
+              }
+            }, null, 2)
+          }]
         };
       } catch (error) {
         return {
-          error: `Failed to build index: ${(error as Error).message}`,
-          success: false
+          content: [{
+            type: 'text',
+            text: `Failed to build index: ${(error as Error).message}`
+          }],
+          isError: true
         };
       }
     }
@@ -314,7 +304,7 @@ export const similarityTools: ToolDefinition[] = [
 ];
 
 // Helper functions
-function generateRecommendations(results: any[]): string[] {
+function generateRecommendations(results: Array<{ score: number; file: string; metadata: { title?: string; tags?: string[]; wordCount?: number }; excerpt: string }>): string[] {
   const recommendations = [];
   
   const duplicates = results.filter(r => r.score > 0.8);
@@ -330,7 +320,7 @@ function generateRecommendations(results: any[]): string[] {
   return recommendations;
 }
 
-function getSuggestedAction(results: any[]): string {
+function getSuggestedAction(results: Array<{ score: number }>): string {
   if (results.length === 0) return 'Create new entry';
   
   const topScore = results[0].score;
@@ -339,7 +329,7 @@ function getSuggestedAction(results: any[]): string {
   return 'Create new entry';
 }
 
-function formatResults(results: any[], label: string): any {
+function formatResults(results: Array<{ score: number; file: string; metadata: { title?: string; tags?: string[]; wordCount?: number } }>, label: string): { label: string; count: number; entries: Array<{ file: string; similarity: string; title: string }> } | null {
   if (results.length === 0) return null;
   
   return {
@@ -353,7 +343,7 @@ function formatResults(results: any[], label: string): any {
   };
 }
 
-function generateRelationshipGraph(centerFile: string, results: any[]): string {
+function generateRelationshipGraph(centerFile: string, results: Array<{ score: number; file: string }>): string {
   // Simple ASCII representation
   let graph = `\n${centerFile}\n`;
   results.slice(0, 5).forEach(r => {
@@ -363,7 +353,7 @@ function generateRelationshipGraph(centerFile: string, results: any[]): string {
   return graph;
 }
 
-async function analyzeCluster(files: string[]): Promise<any> {
+async function analyzeCluster(files: string[]): Promise<{ theme: string; commonTags: string[]; keywords: string[] }> {
   // This is simplified - in reality would analyze content
   const commonTags = new Map<string, number>();
   
@@ -384,7 +374,7 @@ async function analyzeCluster(files: string[]): Promise<any> {
   };
 }
 
-function generateClusteringInsights(clusters: any[]): string[] {
+function generateClusteringInsights(clusters: Array<{ size: number }>): string[] {
   const insights = [];
   
   const largeClusters = clusters.filter(c => c.size > 5);

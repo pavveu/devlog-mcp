@@ -26,7 +26,7 @@ export interface CompressionVisualData {
   productivityScore: 'HIGH' | 'MEDIUM' | 'LOW';
   velocity: number;
   decisions: string[];
-  timeline: any[];
+  timeline: { task: string; completed: boolean }[];
 }
 
 /**
@@ -176,7 +176,7 @@ function categorizeDecisions(decisions: string[]) {
 /**
  * Generate architecture-focused decision flow
  */
-function generateArchitectureDecisionFlow(weekNumber: number, categories: any): string {
+function generateArchitectureDecisionFlow(weekNumber: number, categories: { architecture: string[]; implementation: string[] }): string {
   const arch = categories.architecture.slice(0, 3);
   const impl = categories.implementation.slice(0, 2);
   

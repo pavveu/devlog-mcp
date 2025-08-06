@@ -144,7 +144,6 @@ export class ConfidenceScorer {
     let quality = 0.5; // Base quality
 
     const wordCount = content.split(/\s+/).length;
-    const lineCount = content.split('\n').length;
     
     // Length indicators
     if (wordCount > 50) quality += 0.1;

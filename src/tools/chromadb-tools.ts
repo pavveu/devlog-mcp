@@ -10,7 +10,7 @@ const INDEXER_PATH = path.join(process.cwd(), 'scripts', 'chromadb-smart-index.p
 /**
  * Execute Python ChromaDB script and return results
  */
-async function runChromaCommand(args: string[]): Promise<any> {
+async function runChromaCommand(args: string[]): Promise<{ success: boolean; results: Array<{ file: string; source: string; type: string; relevance: string; preview: string }>; raw: string }> {
   return new Promise((resolve, reject) => {
     const python = spawn('python3', [INDEXER_PATH, ...args]);
     let stdout = '';
@@ -90,29 +90,30 @@ export const chromadbTools: ToolDefinition[] = [
       source: z.enum(['all', 'devlog', 'jira', 'perplexity']).optional().describe('Filter by source'),
       limit: z.number().default(5).describe('Number of results')
     },
-    handler: async ({ query, source, limit = 5 }): Promise<CallToolResult> => {
+    handler: async (args: { query: string; source?: 'all' | 'devlog' | 'jira' | 'perplexity'; limit?: number }): Promise<CallToolResult> => {
+      const { query, source } = args;
       try {
-        const args = ['--search', query];
+        const commandArgs = ['--search', query];
         if (source && source !== 'all') {
-          args.push('--source', source);
+          commandArgs.push('--source', source);
         }
         
-        const result = await runChromaCommand(args);
+        const result = await runChromaCommand(commandArgs);
         
         return {
           content: [{
             type: 'text',
             text: `Found ${result.results.length} results for "${query}":\n\n` +
-              result.results.map((r: any, i: number) => 
+              result.results.map((r, i: number) => 
                 `${i + 1}. ${r.file}\n   Source: ${r.source}\n   Type: ${r.type}\n   Relevance: ${r.relevance}\n   Preview: ${r.preview}`
               ).join('\n\n')
           }]
         };
-      } catch (error: any) {
+      } catch (error: unknown) {
         return {
           content: [{
             type: 'text',
-            text: `Error searching ChromaDB: ${error.message}`
+            text: `Error searching ChromaDB: ${(error as Error).message}`
           }],
           isError: true
         };
@@ -128,13 +129,14 @@ export const chromadbTools: ToolDefinition[] = [
       type: z.enum(['perplexity', 'jira']).describe('Type of content to index'),
       query: z.string().describe('Query (for Perplexity) or issue key (for Jira)'),
       content: z.string().describe('Content to index'),
-      metadata: z.object({}).optional().describe('Additional metadata')
+      metadata: z.record(z.unknown()).optional().describe('Additional metadata')
     },
-    handler: async ({ type, query, content, metadata = {} }): Promise<CallToolResult> => {
+    handler: async (args: { type: 'perplexity' | 'jira'; query: string; content: string; metadata?: Record<string, unknown> }): Promise<CallToolResult> => {
+      const { type, query, content } = args;
       try {
         if (type === 'perplexity') {
-          const args = ['--index-perplexity', query, content];
-          await runChromaCommand(args);
+          const commandArgs = ['--index-perplexity', query, content];
+          await runChromaCommand(commandArgs);
           return {
             content: [{
               type: 'text',
@@ -147,8 +149,8 @@ export const chromadbTools: ToolDefinition[] = [
           const fs = await import('fs/promises');
           await fs.writeFile(tempFile, content);
           
-          const args = ['--index-jira', tempFile];
-          await runChromaCommand(args);
+          const commandArgs = ['--index-jira', tempFile];
+          await runChromaCommand(commandArgs);
           
           // Clean up temp file
           await fs.unlink(tempFile);
@@ -168,11 +170,11 @@ export const chromadbTools: ToolDefinition[] = [
           }],
           isError: true
         };
-      } catch (error: any) {
+      } catch (error: unknown) {
         return {
           content: [{
             type: 'text',
-            text: `Error indexing content: ${error.message}`
+            text: `Error indexing content: ${(error as Error).message}`
           }],
           isError: true
         };
@@ -187,10 +189,11 @@ export const chromadbTools: ToolDefinition[] = [
     inputSchema: {
       full: z.boolean().default(false).describe('Perform full reindex (delete and recreate)')
     },
-    handler: async ({ full = false }): Promise<CallToolResult> => {
+    handler: async (args: { full?: boolean }): Promise<CallToolResult> => {
+      const { full = false } = args;
       try {
-        const args = full ? ['--full'] : [];
-        const result = await runChromaCommand(args);
+        const commandArgs = full ? ['--full'] : [];
+        const result = await runChromaCommand(commandArgs);
         
         // Extract indexing stats from output
         const match = result.raw.match(/Total files: (\d+)\nIndexed: (\d+)\nCollection size: (\d+)/);
@@ -209,11 +212,11 @@ export const chromadbTools: ToolDefinition[] = [
             text: 'Reindexing complete'
           }]
         };
-      } catch (error: any) {
+      } catch (error: unknown) {
         return {
           content: [{
             type: 'text',
-            text: `Error reindexing: ${error.message}`
+            text: `Error reindexing: ${(error as Error).message}`
           }],
           isError: true
         };

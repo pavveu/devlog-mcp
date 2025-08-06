@@ -3,28 +3,6 @@ import { ToolDefinition } from './registry.js';
 import { searchDevlogs } from '../utils/search.js';
 import { CallToolResult } from '../types.js';
 
-// Helper function for analyzing codebase
-async function analyzeCodebaseForFeature(feature: string) {
-  const results = await searchDevlogs(feature);
-  
-  return {
-    checklist: [
-      'Research existing patterns and conventions',
-      'Create feature branch from main',
-      'Implement core functionality',
-      'Add comprehensive tests',
-      'Update documentation'
-    ],
-    conflicts: [],
-    components: results.slice(0, 3).map(r => r.file),
-    testScenarios: [
-      'Unit tests for core logic',
-      'Integration tests',
-      'Edge case handling',
-      'Error scenarios'
-    ]
-  };
-}
 
 export const analysisTools: ToolDefinition[] = [
   {

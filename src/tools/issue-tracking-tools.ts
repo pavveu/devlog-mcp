@@ -12,7 +12,7 @@ import { getCurrentWorkspace } from '../utils/workspace.js';
 import { DEVLOG_PATH } from '../types/devlog.js';
 
 // Issue status enum
-const IssueStatus = z.enum(['pending', 'active', 'resolved', 'archived']);
+// const _IssueStatus = z.enum(['pending', 'active', 'resolved', 'archived']);
 const IssueCategory = z.enum(['bug', 'enhancement', 'research', 'question']);
 const IssuePriority = z.enum(['low', 'medium', 'high', 'critical']);
 
@@ -111,7 +111,7 @@ async function parseIssueFile(filePath: string): Promise<Issue | null> {
     
     // Extract YAML frontmatter
     let inFrontmatter = false;
-    let frontmatterEnd = 0;
+    // let frontmatterEnd = 0;
     const yamlLines: string[] = [];
     
     for (let i = 0; i < lines.length; i++) {
@@ -120,7 +120,7 @@ async function parseIssueFile(filePath: string): Promise<Issue | null> {
           inFrontmatter = true;
           continue;
         } else {
-          frontmatterEnd = i;
+          // frontmatterEnd = i;
           break;
         }
       }
@@ -171,7 +171,7 @@ async function parseIssueFile(filePath: string): Promise<Issue | null> {
     }
     
     return issue as Issue;
-  } catch (error) {
+  } catch {
     return null;
   }
 }
@@ -194,7 +194,7 @@ async function listIssuesInDirectory(dir: string): Promise<Issue[]> {
     }
     
     return issues.sort((a, b) => new Date(b.created_date).getTime() - new Date(a.created_date).getTime());
-  } catch (error) {
+  } catch {
     return [];
   }
 }
@@ -244,7 +244,7 @@ export const issueTrackingTools: ToolDefinition[] = [
             if (sessionMatch) {
               issue.session_id = sessionMatch[1];
             }
-          } catch (e) {
+          } catch {
             // Ignore if can't extract session ID
           }
         }
@@ -403,7 +403,7 @@ export const issueTrackingTools: ToolDefinition[] = [
             issueFile = filePath;
             currentStatus = dir;
             break;
-          } catch (e) {
+          } catch {
             // File doesn't exist in this directory, continue
           }
         }
@@ -497,7 +497,7 @@ export const issueTrackingTools: ToolDefinition[] = [
             issueFile = filePath;
             currentStatus = dir;
             break;
-          } catch (e) {
+          } catch {
             // File doesn't exist in this directory, continue
           }
         }

@@ -31,7 +31,7 @@ export async function disableToolTracking(): Promise<void> {
   }
 }
 
-export async function trackToolUsage(toolName: string, context?: any): Promise<void> {
+export async function trackToolUsage(toolName: string, context?: {taskId?: string}): Promise<void> {
   if (!isTracking) return;
   
   // Notify heartbeat manager of activity
@@ -116,13 +116,13 @@ async function processPendingUpdates(): Promise<void> {
 }
 
 // Wrapper for MCP tool handlers to add tracking
-export function withToolTracking<T extends (...args: any[]) => Promise<any>>(
+export function withToolTracking<T extends (...args: unknown[]) => Promise<unknown>>(
   toolName: string,
   handler: T
 ): T {
-  return (async (...args: any[]) => {
+  return (async (...args: unknown[]) => {
     // Track tool usage
-    await trackToolUsage(toolName, args[0]);
+    await trackToolUsage(toolName, args[0] as {taskId?: string} | undefined);
     
     // Execute original handler
     return handler(...args);

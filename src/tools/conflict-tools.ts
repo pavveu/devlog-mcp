@@ -60,7 +60,6 @@ export const conflictTools: ToolDefinition[] = [
       
       const duplicates = results.filter(r => {
         const content = r.fullContent?.toLowerCase() || '';
-        const descLower = description.toLowerCase();
         
         // Check for implementations with similar descriptions
         return content.includes('implemented') || content.includes('completed');

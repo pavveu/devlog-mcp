@@ -80,7 +80,7 @@ async function runTests() {
     console.log(`Key Phrases: ${result.metadata.keyPhrases.join(', ')}`);
     
     console.log('\n🏷️  Suggested Tags:');
-    result.suggestions.forEach((suggestion: any) => {
+    result.suggestions.forEach((suggestion: { tag: string; confidence: number; reason: string }) => {
       const confidence = (suggestion.confidence * 100).toFixed(1);
       console.log(`  ${suggestion.tag.padEnd(20)} [${confidence}%] - ${suggestion.reason}`);
     });
@@ -95,7 +95,7 @@ async function runTests() {
   
   console.log('\nCurrent tags:', currentTags);
   console.log('\n✅ Tags to add:');
-  improvements.add.forEach((s: any) => {
+  improvements.add.forEach((s: { tag: string; confidence: number }) => {
     console.log(`  ${s.tag} [${(s.confidence * 100).toFixed(1)}%]`);
   });
   
@@ -105,7 +105,7 @@ async function runTests() {
   });
   
   console.log('\n🔄 Tags to replace:');
-  improvements.replace.forEach((r: any) => {
+  improvements.replace.forEach((r: { old: string; new: { tag: string; confidence: number } }) => {
     console.log(`  ${r.old} → ${r.new.tag} [${(r.new.confidence * 100).toFixed(1)}%]`);
   });
 
@@ -121,8 +121,8 @@ async function runTests() {
   });
   
   console.log('\nBatch results:');
-  batchResults.forEach((suggestions: any, id: string) => {
-    console.log(`\n${id}: ${suggestions.map((s: any) => s.tag).join(', ')}`);
+  batchResults.forEach((suggestions: Array<{ tag: string }>, id: string) => {
+    console.log(`\n${id}: ${suggestions.map(s => s.tag).join(', ')}`);
   });
 }
 

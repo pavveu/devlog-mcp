@@ -1,12 +1,14 @@
 import { McpServer } from '../server/mcp.js';
-import { z } from 'zod';
+import { ZodRawShape } from 'zod';
+import { CallToolResult } from '../types.js';
 
 export interface ToolDefinition {
   name: string;
   title: string;
   description: string;
-  inputSchema: any;
-  handler: (params: any) => Promise<any>;
+  inputSchema: ZodRawShape;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  handler: (...args: any[]) => Promise<CallToolResult>;
 }
 
 /**
@@ -20,7 +22,8 @@ export function registerTool(server: McpServer, tool: ToolDefinition) {
       description: tool.description,
       inputSchema: tool.inputSchema,
     },
-    tool.handler
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    tool.handler as any
   );
 }
 

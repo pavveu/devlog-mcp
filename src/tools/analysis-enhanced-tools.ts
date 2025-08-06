@@ -1,9 +1,8 @@
+import { z } from 'zod';
 import { ToolDefinition } from './registry.js';
-import { SearchResult } from '../types/devlog.js';
 import { CallToolResult } from '../types.js';
-import { searchDevlogs } from '../utils/search.js';
 import { readFile, readdir } from 'fs/promises';
-import { join, resolve, basename } from 'path';
+import { join, basename } from 'path';
 import { DEVLOG_PATH } from '../types/devlog.js';
 import matter from 'gray-matter';
 
@@ -43,7 +42,13 @@ interface DevLogFile {
 
 interface ParsedContent {
   content: string;
-  metadata: any;
+  metadata: {
+    date?: string;
+    title?: string;
+    tags?: { status?: string };
+    agent_id?: string;
+    [key: string]: unknown;
+  };
 }
 
 // Helper function to read devlog files
@@ -91,21 +96,11 @@ export const enhancedAnalysisTools: ToolDefinition[] = [
     title: 'Analyze Patterns',
     description: 'Find recurring issues, patterns, and technical debt across devlogs',
     inputSchema: {
-      type: 'object',
-      properties: {
-        timeRange: {
-          type: 'string',
-          description: 'Time range to analyze (e.g., "7d", "30d", "all")',
-          default: '30d'
-        },
-        minOccurrences: {
-          type: 'number',
-          description: 'Minimum occurrences to be considered a pattern',
-          default: 3
-        }
-      }
+      timeRange: z.string().optional().default('30d').describe('Time range to analyze (e.g., "7d", "30d", "all")'),
+      minOccurrences: z.number().optional().default(3).describe('Minimum occurrences to be considered a pattern')
     },
-    handler: async ({ timeRange = '30d', minOccurrences = 3 }): Promise<CallToolResult> => {
+    handler: async (args: { timeRange?: string; minOccurrences?: number }): Promise<CallToolResult> => {
+      const { timeRange = '30d', minOccurrences = 3 } = args;
       const files = await readDevLogFiles();
       const patterns: Map<string, Pattern> = new Map();
       
@@ -194,22 +189,11 @@ export const enhancedAnalysisTools: ToolDefinition[] = [
     title: 'Dependency Graph',
     description: 'Visualize feature dependencies and blocking relationships',
     inputSchema: {
-      type: 'object',
-      properties: {
-        format: {
-          type: 'string',
-          enum: ['mermaid', 'json', 'dot'],
-          description: 'Output format for the dependency graph',
-          default: 'mermaid'
-        },
-        scope: {
-          type: 'string',
-          description: 'Filter to specific scope (e.g., "features", "all")',
-          default: 'features'
-        }
-      }
+      format: z.enum(['mermaid', 'json', 'dot']).optional().default('mermaid').describe('Output format for the dependency graph'),
+      scope: z.string().optional().default('features').describe('Filter to specific scope (e.g., "features", "all")')
     },
-    handler: async ({ format = 'mermaid', scope = 'features' }): Promise<CallToolResult> => {
+    handler: async (args: { format?: 'mermaid' | 'json' | 'dot'; scope?: string }): Promise<CallToolResult> => {
+      const { format = 'mermaid', scope = 'features' } = args;
       const files = await readDevLogFiles();
       const dependencies: Dependency[] = [];
       const nodes: Map<string, { title: string; status: string }> = new Map();
@@ -294,20 +278,11 @@ export const enhancedAnalysisTools: ToolDefinition[] = [
     title: 'Burndown Chart',
     description: 'Track progress on epics/features with burndown visualization',
     inputSchema: {
-      type: 'object',
-      properties: {
-        epic: {
-          type: 'string',
-          description: 'Epic or feature name to track'
-        },
-        days: {
-          type: 'number',
-          description: 'Number of days to include in chart',
-          default: 30
-        }
-      }
+      epic: z.string().optional().describe('Epic or feature name to track'),
+      days: z.number().optional().default(30).describe('Number of days to include in chart')
     },
-    handler: async ({ epic, days = 30 }: { epic?: string; days?: number }): Promise<CallToolResult> => {
+    handler: async (args: { epic?: string; days?: number }): Promise<CallToolResult> => {
+      const { epic, days = 30 } = args;
       const files = await readDevLogFiles();
       const burndownData: BurndownData[] = [];
       const dailyProgress: Map<string, { completed: Set<string>; added: Set<string> }> = new Map();
@@ -390,16 +365,10 @@ export const enhancedAnalysisTools: ToolDefinition[] = [
     title: 'Team Metrics',
     description: 'Analyze multi-agent collaboration and productivity metrics',
     inputSchema: {
-      type: 'object',
-      properties: {
-        days: {
-          type: 'number',
-          description: 'Number of days to analyze',
-          default: 7
-        }
-      }
+      days: z.number().optional().default(7).describe('Number of days to analyze')
     },
-    handler: async ({ days = 7 }): Promise<CallToolResult> => {
+    handler: async (args: { days?: number }): Promise<CallToolResult> => {
+      const { days = 7 } = args;
       const files = await readDevLogFiles();
       const agentMetrics: Map<string, AgentMetrics> = new Map();
       const handoffs: Map<string, Map<string, number>> = new Map();
@@ -455,7 +424,7 @@ export const enhancedAnalysisTools: ToolDefinition[] = [
         const agentHandoffs = handoffs.get(agentId);
         if (agentHandoffs) {
           metrics.handoffs = Array.from(agentHandoffs.entries())
-            .map(([to, count]) => ({
+            .map(([to, _count]) => ({
               to,
               efficiency: calculateHandoffEfficiency(agentId, to, files)
             }));
@@ -502,7 +471,7 @@ function generatePatternRecommendations(patterns: Pattern[]): string[] {
   return recommendations;
 }
 
-function generateMermaidGraph(nodes: Map<string, any>, dependencies: Dependency[]): string {
+function generateMermaidGraph(nodes: Map<string, { title: string; status: string }>, dependencies: Dependency[]): string {
   let mermaid = 'graph TD\n';
   
   // Add nodes
@@ -524,7 +493,7 @@ function generateMermaidGraph(nodes: Map<string, any>, dependencies: Dependency[
   return mermaid;
 }
 
-function generateDotGraph(nodes: Map<string, any>, dependencies: Dependency[]): string {
+function generateDotGraph(nodes: Map<string, { title: string; status: string }>, dependencies: Dependency[]): string {
   let dot = 'digraph Dependencies {\n';
   dot += '    rankdir=LR;\n';
   
@@ -558,7 +527,7 @@ function generateBurndownRecommendation(velocity: number, remaining: number, pro
   }
 }
 
-function calculateHandoffEfficiency(from: string, to: string, files: DevLogFile[]): number {
+function calculateHandoffEfficiency(_from: string, _to: string, _files: DevLogFile[]): number {
   // Simple efficiency calculation based on overlap and completion
   // In a real implementation, this would analyze actual handoff quality
   return 0.85; // Placeholder

@@ -3,7 +3,6 @@
  * Reuses velocity insights, timeline generation, and pattern analysis
  */
 
-import { z } from 'zod';
 import { promises as fs } from 'fs';
 import path from 'path';
 import { CallToolResult } from '../types.js';
@@ -21,7 +20,7 @@ interface SessionData {
   file: string;
   date: Date;
   content: string;
-  frontmatter: any;
+  frontmatter: Record<string, unknown>;
   summary?: string;
   completedTasks: string[];
   decisions: string[];
@@ -67,8 +66,8 @@ interface TimelineData {
 }
 
 // Helper to extract title from frontmatter or content
-function extractTitle(parsed: any): string {
-  if (parsed.data.title) return parsed.data.title;
+function extractTitle(parsed: { data: Record<string, unknown>; content: string }): string {
+  if (parsed.data.title && typeof parsed.data.title === 'string') return parsed.data.title;
   
   const titleMatch = parsed.content.match(/^#\s+(.+)$/m);
   return titleMatch ? titleMatch[1].trim() : '---';
@@ -263,16 +262,16 @@ async function generateAnalyticalSummary(
   weekDates: { start: Date; end: Date }
 ): Promise<string> {
   const allCompleted = sessions.flatMap(s => s.completedTasks);
-  const allDecisions = sessions.flatMap(s => s.decisions);
   const allInsights = sessions.flatMap(s => s.insights);
   
   // Extract focus areas
   const focusAreas = new Set<string>();
   sessions.forEach(s => {
-    if (s.frontmatter.tags?.scope) {
-      const scopes = Array.isArray(s.frontmatter.tags.scope) 
-        ? s.frontmatter.tags.scope 
-        : [s.frontmatter.tags.scope];
+    const tags = s.frontmatter.tags as { scope?: string | string[]; [key: string]: unknown } | undefined;
+    if (tags?.scope) {
+      const scopes = Array.isArray(tags.scope) 
+        ? tags.scope 
+        : [tags.scope];
       scopes.forEach((scope: string) => focusAreas.add(scope));
     }
   });
